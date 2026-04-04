@@ -6,39 +6,48 @@ const UpdateNotification = () => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
   const [showNotification, setShowNotification] = useState(true);
-
-  // FIXED: Simpan referensi timer agar bisa di-clear saat unmount
   const remindLaterTimerRef = useRef(null);
 
   useEffect(() => {
-    // Daftarkan semua listener dari Electron main process
-    window.electron.onUpdateAvailable((event, info) => {
-      // FIXED: Pakai electron.getSkippedVersions() bukan localStorage langsung
-      // Ini lebih aman di Electron karena localStorage bisa hilang
-      window.electron.getSkippedVersions().then((skippedVersions) => {
-        const skipped = skippedVersions || [];
-        if (!skipped.includes(info.version)) {
-          setUpdateInfo(info);
-          setShowNotification(true);
-        }
+    // Guard: pastikan window.electron tersedia dan setiap fungsi ada
+    const el = window.electron;
+    if (!el) return;
+
+    if (typeof el.onUpdateAvailable === 'function') {
+      el.onUpdateAvailable((event, info) => {
+        const getSkipped = typeof el.getSkippedVersions === 'function'
+          ? el.getSkippedVersions()
+          : Promise.resolve([]);
+        getSkipped.then((skippedVersions) => {
+          const skipped = skippedVersions || [];
+          if (!skipped.includes(info.version)) {
+            setUpdateInfo(info);
+            setShowNotification(true);
+          }
+        });
       });
-    });
+    }
 
-    window.electron.onUpdateDownloadProgress((event, progress) => {
-      setDownloadProgress(progress.percent);
-    });
+    if (typeof el.onUpdateDownloadProgress === 'function') {
+      el.onUpdateDownloadProgress((event, progress) => {
+        setDownloadProgress(progress.percent);
+      });
+    }
 
-    window.electron.onUpdateDownloaded(() => {
-      setIsDownloading(false);
-      setIsInstalling(true);
-    });
+    if (typeof el.onUpdateDownloaded === 'function') {
+      el.onUpdateDownloaded(() => {
+        setIsDownloading(false);
+        setIsInstalling(true);
+      });
+    }
 
-    window.electron.onUpdateError((event, error) => {
-      console.error('Update error:', error);
-      setIsDownloading(false);
-    });
+    if (typeof el.onUpdateError === 'function') {
+      el.onUpdateError((event, error) => {
+        console.error('Update error:', error);
+        setIsDownloading(false);
+      });
+    }
 
-    // FIXED: Cleanup saat komponen unmount — clear timer agar tidak memory leak
     return () => {
       if (remindLaterTimerRef.current) {
         clearTimeout(remindLaterTimerRef.current);
@@ -48,32 +57,33 @@ const UpdateNotification = () => {
 
   const handleDownload = async () => {
     setIsDownloading(true);
-    await window.electron.downloadUpdate();
+    if (typeof window.electron?.downloadUpdate === 'function') {
+      await window.electron.downloadUpdate();
+    }
   };
 
   const handleInstall = async () => {
-    await window.electron.installUpdate();
+    if (typeof window.electron?.installUpdate === 'function') {
+      await window.electron.installUpdate();
+    }
   };
 
   const handleSkip = async () => {
     if (!updateInfo) return;
-    // FIXED: Simpan versi yang di-skip via electron (bukan localStorage)
-    await window.electron.skipUpdate(updateInfo.version);
+    if (typeof window.electron?.skipUpdate === 'function') {
+      await window.electron.skipUpdate(updateInfo.version);
+    }
     setShowNotification(false);
   };
 
   const handleRemindLater = () => {
     setShowNotification(false);
-
-    // FIXED: Simpan referensi timer dan clear saat komponen unmount
     remindLaterTimerRef.current = setTimeout(() => {
       setShowNotification(true);
     }, 24 * 60 * 60 * 1000);
   };
 
-  if (!showNotification || !updateInfo) {
-    return null;
-  }
+  if (!showNotification || !updateInfo) return null;
 
   if (isInstalling) {
     return (
@@ -94,10 +104,7 @@ const UpdateNotification = () => {
         <div className="update-content">
           <h3>Mendownload Update</h3>
           <div className="progress-bar">
-            <div
-              className="progress-fill"
-              style={{ width: `${downloadProgress}%` }}
-            />
+            <div className="progress-fill" style={{ width: `${downloadProgress}%` }} />
           </div>
           <p>{Math.round(downloadProgress)}% selesai</p>
         </div>
@@ -114,22 +121,14 @@ const UpdateNotification = () => {
         {updateInfo.releaseNotes && (
           <details>
             <summary>Lihat perubahan</summary>
-            <div className="release-notes">
-              {updateInfo.releaseNotes}
-            </div>
+            <div className="release-notes">{updateInfo.releaseNotes}</div>
           </details>
         )}
       </div>
       <div className="update-actions">
-        <button onClick={handleDownload} className="btn-primary">
-          Download
-        </button>
-        <button onClick={handleRemindLater} className="btn-secondary">
-          Nanti
-        </button>
-        <button onClick={handleSkip} className="btn-text">
-          Skip versi ini
-        </button>
+        <button onClick={handleDownload} className="btn-primary">Download</button>
+        <button onClick={handleRemindLater} className="btn-secondary">Nanti</button>
+        <button onClick={handleSkip} className="btn-text">Skip versi ini</button>
       </div>
     </div>
   );

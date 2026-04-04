@@ -1,28 +1,24 @@
-name: Build & Release DramaTool
+name: Build Windows EXE
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [ "main", "master" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'screenshots/**'
+  pull_request:
+    branches: [ "main", "master" ]
   workflow_dispatch:
     inputs:
-      draft:
-        description: 'Buat sebagai draft release?'
+      create_release:
+        description: 'Buat GitHub Release'
         required: false
-        default: 'true'
-        type: boolean
-      channel:
-        description: 'Channel rilis'
-        required: false
-        default: 'stable'
+        default: 'false'
         type: choice
         options:
-          - stable
-          - beta
-          - dev
-
-permissions:
-  contents: write
+          - 'true'
+          - 'false'
 
 env:
   NODE_VERSION: '20'
@@ -30,51 +26,21 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-
-  # JOB 1: Validasi
-  validate:
-    name: "Validasi Prasyarat"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout kode
-        uses: actions/checkout@v4.2.2
-
-      - name: Cek file kode wajib ada
-        run: |
-          MISSING=()
-          for f in "package.json" "preload.js" "autoUpdater.js" "gemini_load_balancer.py" "DramaTool.nsi" "src/main/main.js"; do
-            if [ ! -f "$f" ]; then MISSING+=("TIDAK ADA: $f"); else echo "OK: $f"; fi
-          done
-          if [ ${#MISSING[@]} -gt 0 ]; then
-            printf '%s\n' "${MISSING[@]}"
-            exit 1
-          fi
-          for f in "assets/installer.ico" "assets/banner.bmp" "assets/LICENSE.txt"; do
-            if [ ! -f "$f" ]; then echo "WARNING: $f - akan dibuat placeholder"; else echo "OK: $f"; fi
-          done
-          echo "Validasi selesai."
-
-      - name: Validasi package.json
-        run: |
-          node -e "
-            const p = require('./package.json');
-            if (!p.scripts || !p.scripts.build) { console.error('Tidak ada script build'); process.exit(1); }
-            console.log('OK versi:', p.version);
-          "
-
-  # JOB 2: Build Python
-  build-python:
-    name: "Build Python Backend"
+  build:
+    name: Build Drama Tool for Windows
     runs-on: windows-latest
-    needs: validate
-    steps:
-      - name: Checkout kode
-        uses: actions/checkout@v4.2.2
+    timeout-minutes: 60
 
-      - name: Setup Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5.4.0
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4.2.2
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4.3.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Cache pip packages
         uses: actions/cache@v4.2.3
@@ -84,183 +50,69 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      - name: Install dependensi Python
-        run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller schedule requests
-          if (Test-Path "backend/requirements.txt") { pip install -r backend/requirements.txt }
-
-      - name: Build gemini_load_balancer.py ke .exe
-        run: pyinstaller --onefile --name gemini_load_balancer --clean gemini_load_balancer.py
-
-      - name: Verifikasi hasil build Python
-        run: |
-          if (-not (Test-Path "dist/gemini_load_balancer.exe")) { Write-Error "exe tidak ditemukan"; exit 1 }
-          Write-Host "OK: $([math]::Round((Get-Item dist/gemini_load_balancer.exe).Length/1MB,1)) MB"
-
-      - name: Upload artifact Python backend
-        uses: actions/upload-artifact@v4.6.2
+      - name: Setup Python
+        uses: actions/setup-python@v5.4.0
         with:
-          name: python-backend
-          path: dist/gemini_load_balancer.exe
-          retention-days: 1
+          python-version: ${{ env.PYTHON_VERSION }}
 
-  # JOB 3: Build Electron + NSIS
-  build-electron:
-    name: "Build Electron + NSIS Installer"
-    runs-on: windows-latest
-    needs: build-python
-    outputs:
-      installer_name: ${{ steps.find-installer.outputs.INSTALLER_NAME }}
-      installer_path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
-      app_version: ${{ steps.get-version.outputs.VERSION }}
-    steps:
-      - name: Checkout kode
-        uses: actions/checkout@v4.2.2
+      - name: Install FFmpeg
+        run: |
+          choco install ffmpeg -y
+          ffmpeg -version
 
-      - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4.3.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Install dependensi Node
+      - name: Install NPM Dependencies
         run: npm install
 
-      - name: Download Python backend
-        uses: actions/download-artifact@v4.2.1
-        with:
-          name: python-backend
-          path: backend/
-
-      - name: Verifikasi backend tersedia
-        shell: pwsh
+      - name: Install Python Dependencies
         run: |
-          if (-not (Test-Path "backend/gemini_load_balancer.exe")) { Write-Error "backend exe tidak ditemukan"; exit 1 }
-          Write-Host "OK: $([math]::Round((Get-Item backend/gemini_load_balancer.exe).Length/1MB,1)) MB"
+          python -m pip install --upgrade pip
+          if (Test-Path "backend/requirements.txt") {
+            pip install -r backend/requirements.txt
+            Write-Host "OK: Python dependencies installed"
+          } else {
+            Write-Host "WARNING: backend/requirements.txt tidak ditemukan, skip"
+          }
 
-      - name: Ambil versi dari package.json
-        id: get-version
+      - name: Debug Folder Structure
         run: |
-          $v = node -e "console.log(require('./package.json').version)"
-          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "=== ROOT ==="
+          Get-ChildItem -Name
+          Write-Host "=== SRC ==="
+          if (Test-Path src) { Get-ChildItem src -Recurse -Name | Select-Object -First 50 }
+          Write-Host "=== ASSETS ==="
+          if (Test-Path assets) { Get-ChildItem assets -Name }
+          Write-Host "=== BACKEND ==="
+          if (Test-Path backend) { Get-ChildItem backend -Name }
 
-      - name: Generate file renderer yang hilang
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path src/renderer | Out-Null
-
-          if (-not (Test-Path "src/renderer/main.jsx")) {
-            Write-Host "Generate src/renderer/main.jsx..."
-            $lines = @(
-              'import React from "react";',
-              'import { createRoot } from "react-dom/client";',
-              'import App from "./App";',
-              'import "./index.css";',
-              'createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);'
-            )
-            $lines | Set-Content src/renderer/main.jsx -Encoding utf8
-          }
-
-          if (-not (Test-Path "src/renderer/App.jsx")) {
-            Write-Host "Generate src/renderer/App.jsx..."
-            $lines = @(
-              'import React, { useState } from "react";',
-              'import Settings from "../../Settings";',
-              'import UpdateNotification from "../../UpdateNotification";',
-              'const App = () => {',
-              '  const [page, setPage] = useState("home");',
-              '  return (',
-              '    <div className="app">',
-              '      <UpdateNotification />',
-              '      <div className="sidebar">',
-              '        <div className="sidebar-logo"><h1>DramaTool</h1></div>',
-              '        <nav className="sidebar-nav">',
-              '          <button className={page==="home"?"nav-item active":"nav-item"} onClick={()=>setPage("home")}>Beranda</button>',
-              '          <button className={page==="settings"?"nav-item active":"nav-item"} onClick={()=>setPage("settings")}>Pengaturan</button>',
-              '        </nav>',
-              '      </div>',
-              '      <div className="main-content">',
-              '        {page==="home" && <div className="home-page"><h2>Selamat Datang</h2></div>}',
-              '        {page==="settings" && <Settings />}',
-              '      </div>',
-              '    </div>',
-              '  );',
-              '};',
-              'export default App;'
-            )
-            $lines | Set-Content src/renderer/App.jsx -Encoding utf8
-          }
-
-          if (-not (Test-Path "src/renderer/index.css")) {
-            Write-Host "Generate src/renderer/index.css..."
-            $lines = @(
-              '* { margin:0; padding:0; box-sizing:border-box; }',
-              'body { font-family:system-ui; background:#0f0f0f; color:#f0f0f0; height:100vh; overflow:hidden; }',
-              '.app { display:flex; height:100vh; }',
-              '.sidebar { width:220px; background:#141414; border-right:1px solid #2a2a2a; padding:16px 0; }',
-              '.sidebar-logo { padding:0 20px 16px; } .sidebar-logo h1 { font-size:18px; }',
-              '.sidebar-nav { display:flex; flex-direction:column; gap:2px; padding:8px; }',
-              '.nav-item { background:none; border:none; color:#a0a0a0; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }',
-              '.nav-item.active { background:#1a73e8; color:#fff; }',
-              '.main-content { flex:1; overflow-y:auto; padding:32px; }'
-            )
-            $lines | Set-Content src/renderer/index.css -Encoding utf8
-          }
-
-          if (-not (Test-Path "index.html")) {
-            Write-Host "Generate index.html..."
-            $lines = @(
-              '<!DOCTYPE html>',
-              '<html lang="id">',
-              '  <head>',
-              '    <meta charset="UTF-8" />',
-              '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
-              '    <title>DramaTool</title>',
-              '  </head>',
-              '  <body>',
-              '    <div id="root"></div>',
-              '    <script type="module" src="./src/renderer/main.jsx"></script>',
-              '  </body>',
-              '</html>'
-            )
-            $lines | Set-Content index.html -Encoding utf8
-          }
-
-          # Hapus vite.config.js lama (keduanya - case insensitive Windows)
-          Get-ChildItem -Filter "vite.config.js" | Remove-Item -Force -ErrorAction SilentlyContinue
-          Write-Host "OK: vite.config.js lama dihapus jika ada" 
-
-          Write-Host "OK: semua file renderer siap"
-
-      - name: Generate placeholder assets
+      - name: Generate placeholder assets (jika belum ada)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path assets | Out-Null
-          if (-not (Test-Path "assets/installer.ico")) {
+
+          if (-not (Test-Path "assets/icon.ico")) {
+            Write-Host "Generate placeholder icon.ico..."
             magick convert -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
-            magick convert assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/installer.ico
+            magick convert assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/icon.ico
             Remove-Item assets/temp.png -ErrorAction SilentlyContinue
-            Write-Host "OK: installer.ico"
+            Write-Host "OK: icon.ico"
           }
+
           if (-not (Test-Path "assets/banner.bmp")) {
+            Write-Host "Generate placeholder banner.bmp..."
             magick convert -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
             Write-Host "OK: banner.bmp"
           }
+
           if (-not (Test-Path "assets/LICENSE.txt")) {
+            Write-Host "Generate placeholder LICENSE.txt..."
             $lic = @(
               "MIT License",
               "",
-              "Copyright (c) 2026 DramaTool Team",
+              "Copyright (c) 2026 Ansory",
               "",
               "Permission is hereby granted, free of charge, to any person obtaining a copy",
               "of this software and associated documentation files (the Software), to deal",
-              "in the Software without restriction, including without limitation the rights",
-              "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell",
-              "copies of the Software, and to permit persons to whom the Software is",
-              "furnished to do so, subject to the following conditions:",
-              "",
-              "The above copyright notice and this permission notice shall be included in all",
-              "copies or substantial portions of the Software.",
+              "in the Software without restriction.",
               "",
               "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND."
             )
@@ -268,104 +120,112 @@ jobs:
             Write-Host "OK: LICENSE.txt"
           }
 
-      - name: Build React / frontend (Vite)
-        run: npm run build
+          Write-Host "Assets siap."
 
-      - name: Build Electron installer Windows (NSIS)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build:win
-
-      - name: Cari file installer hasil build
-        id: find-installer
+      - name: Generate renderer files (jika belum ada)
         shell: pwsh
         run: |
-          $installer = Get-ChildItem -Path dist -Filter "*Setup*.exe" -Recurse |
-            Where-Object { $_.FullName -notlike "*win-unpacked*" } | Select-Object -First 1
-          if (-not $installer) {
-            $installer = Get-ChildItem -Path dist -Filter "*.exe" -Recurse |
-              Where-Object { $_.FullName -notlike "*win-unpacked*" } | Select-Object -First 1
+          if (-not (Test-Path "src/renderer/index.html") -and -not (Test-Path "index.html")) {
+            Write-Host "WARNING: index.html tidak ditemukan"
+          } else {
+            Write-Host "OK: index.html ada"
           }
-          if (-not $installer) { Write-Error "Installer tidak ditemukan"; exit 1 }
-          echo "INSTALLER_PATH=$($installer.FullName)" >> $env:GITHUB_OUTPUT
-          echo "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_OUTPUT
-          Write-Host "OK: $($installer.Name)"
 
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: windows-installer
-          path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
-          retention-days: 7
+          if (-not (Test-Path "vite.config.mjs") -and -not (Test-Path "vite.config.js")) {
+            Write-Host "WARNING: vite config tidak ditemukan"
+          } else {
+            Write-Host "OK: vite config ada"
+          }
 
-      - name: Upload latest.yml artifact
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: update-manifest
-          path: dist/latest.yml
-          retention-days: 7
-        continue-on-error: true
+      - name: Build Vite (Frontend)
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
-  # JOB 4: Release
-  release:
-    name: "Publish GitHub Release"
-    runs-on: ubuntu-latest
-    needs: build-electron
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    steps:
-      - name: Checkout kode
-        uses: actions/checkout@v4.2.2
+      - name: Build Electron App (NSIS Installer)
+        run: electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NODE_OPTIONS: --max-old-space-size=4096
 
-      - name: Download installer
-        uses: actions/download-artifact@v4.2.1
-        with:
-          name: windows-installer
-          path: release/
-
-      - name: Download update manifest
-        uses: actions/download-artifact@v4.2.1
-        with:
-          name: update-manifest
-          path: release/
-        continue-on-error: true
-
-      - name: Tentukan info rilis
-        id: release-info
+      - name: List Build Output
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then VERSION="${GITHUB_REF#refs/tags/}"; else VERSION="v${{ needs.build-electron.outputs.app_version }}"; fi
-          CHANNEL="${{ github.event.inputs.channel || 'stable' }}"
-          if [[ "$VERSION" == *"beta"* ]] || [[ "$VERSION" == *"dev"* ]] || [[ "$CHANNEL" != "stable" ]]; then PRERELEASE="true"; else PRERELEASE="false"; fi
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then DRAFT="${{ github.event.inputs.draft || 'true' }}"; else DRAFT="false"; fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-          echo "PRERELEASE=$PRERELEASE" >> $GITHUB_OUTPUT
-          echo "DRAFT=$DRAFT" >> $GITHUB_OUTPUT
-          echo "CHANNEL=$CHANNEL" >> $GITHUB_OUTPUT
+          Write-Host "=== DIST FOLDER ==="
+          if (Test-Path dist) {
+            Get-ChildItem dist -Recurse -Name | Where-Object { $_ -notlike "*win-unpacked*" }
+            $exes = Get-ChildItem "dist" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -notlike "*win-unpacked*" }
+            if ($exes) {
+              foreach ($exe in $exes) {
+                Write-Host "Installer: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 2)) MB"
+              }
+            } else {
+              Write-Host "WARNING: Tidak ada .exe installer ditemukan"
+            }
+          } else {
+            Write-Host "ERROR: DIST folder tidak ada!"
+          }
 
-      - name: Buat GitHub Release
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: DramaTool-Setup
+          path: |
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: DramaTool-Portable
+          path: dist/win-unpacked/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2.2.1
         with:
-          tag_name: ${{ steps.release-info.outputs.VERSION }}
-          name: "DramaTool ${{ steps.release-info.outputs.VERSION }}"
-          draft: ${{ steps.release-info.outputs.DRAFT }}
-          prerelease: ${{ steps.release-info.outputs.PRERELEASE }}
-          generate_release_notes: true
-          body: |
-            ## DramaTool ${{ steps.release-info.outputs.VERSION }}
-
-            **Channel:** `${{ steps.release-info.outputs.CHANNEL }}`
-
-            ### Cara Install
-            1. Download file DramaTool-Setup-*.exe di bawah
-            2. Jalankan sebagai Administrator
-            3. Ikuti petunjuk instalasi
-
-            ### Update Otomatis
-            Aplikasi akan mendeteksi update ini otomatis saat startup.
-
-            ### Catatan
-            Backend Python sudah ter-bundle, tidak perlu install Python terpisah.
+          name: Drama Tool v${{ github.run_number }}
+          tag_name: v1.0.${{ github.run_number }}
           files: |
-            release/*.exe
-            release/latest.yml
+            dist/*.exe
+            dist/*.exe.blockmap
+            dist/latest.yml
+          draft: false
+          prerelease: false
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Send Telegram Notification
+        if: always()
+        uses: appleboy/telegram-action@v0.1.1
+        with:
+          to: ${{ secrets.TELEGRAM_TO }}
+          token: ${{ secrets.TELEGRAM_TOKEN }}
+          message: |
+            Drama Tool Build Report
+            Status: ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Download dari tab Actions
+        continue-on-error: true
+
+      - name: Send Discord Notification
+        if: always()
+        uses: tsickert/discord-webhook@v5.0.0
+        with:
+          webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
+          content: |
+            Drama Tool Build - Status: ${{ job.status }}
+            Commit: ${{ github.sha }}
+            Download: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        continue-on-error: true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          npm cache clean --force
+          pip cache purge

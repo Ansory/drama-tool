@@ -1,105 +1,51 @@
-'use strict';
-
-const { app, BrowserWindow, shell } = require('electron');
-const path = require('path');
-
-// ── Single instance lock ─────────────────────────────────────────────────────
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.quit();
-  process.exit(0);
-}
-
-const { initAutoUpdater, registerIpcHandlers, startPeriodicUpdateCheck } = require('../../autoUpdater.js');
-
-const isDev = !app.isPackaged;
-const VITE_DEV_SERVER_URL = 'http://localhost:5173';
-
-let mainWindow = null;
-
-function createWindow() {
-  // Jangan buat window baru kalau sudah ada
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.focus();
-    return;
-  }
-
-  mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 900,
-    minHeight: 600,
-    title: 'DramaTool',
-    webPreferences: {
-      preload: path.join(__dirname, '../../preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
+{
+  "name": "drama-tool",
+  "version": "1.0.0",
+  "description": "Video Generator + Planner Konten Drama China",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron .",
+    "build:win": "electron-builder --win --x64",
+    "build:portable": "electron-builder --win portable",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "author": "Ansory",
+  "license": "MIT",
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "electron-store": "^8.1.0",
+    "ffmpeg-static": "^5.2.0",
+    "fluent-ffmpeg": "^2.1.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.2.3",
+    "sqlite3": "^5.1.6"
+  },
+  "build": {
+    "appId": "com.dramatool.app",
+    "productName": "Drama Tool",
+    "directories": {
+      "output": "dist"
     },
-    show: false,
-    backgroundColor: '#0f0f0f',
-  });
-
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
-    if (isDev) mainWindow.webContents.openDevTools();
-    initAutoUpdater(mainWindow);
-    startPeriodicUpdateCheck();
-  });
-
-  // Load renderer
-  if (isDev) {
-    mainWindow.loadURL(VITE_DEV_SERVER_URL);
-  } else {
-    // app.getAppPath() mengarah ke folder app.asar setelah di-package
-    const rendererPath = path.join(app.getAppPath(), 'dist', 'renderer', 'index.html');
-    mainWindow.loadFile(rendererPath).catch(err => {
-      console.error('Gagal load renderer dari:', rendererPath, err);
-      mainWindow.loadURL(
-        'data:text/html,<h2 style="color:red">Error load UI</h2><pre>' +
-        err.toString() + '</pre><p>Path: ' + rendererPath + '</p>'
-      );
-    });
+    "files": [
+      "src/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
   }
-
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
-    return { action: 'deny' };
-  });
-
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
 }
-
-// ── App lifecycle ────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
-  registerIpcHandlers();
-  createWindow();
-
-  // Fokus ke window yang sudah ada jika instance kedua dibuka
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-});
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
-
-app.on('web-contents-created', (event, contents) => {
-  contents.on('will-navigate', (event, url) => {
-    const allowed = [VITE_DEV_SERVER_URL, 'file://'];
-    if (!allowed.some(o => url.startsWith(o))) {
-      event.preventDefault();
-      shell.openExternal(url);
-    }
-  });
-});

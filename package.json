@@ -48,7 +48,10 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "script": "DramaTool.nsi"
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DramaTool",
+      "license": "assets/LICENSE.txt"
     },
     "publish": {
       "provider": "github",

@@ -1,85 +1,105 @@
-const { app, BrowserWindow } = require('electron');
+/**
+ * src/main/main.js
+ * Electron main process — entry point utama aplikasi DramaTool.
+ * Menginisialisasi BrowserWindow, autoUpdater, dan semua IPC handler.
+ */
+
+const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
+const { initAutoUpdater, registerIpcHandlers, startPeriodicUpdateCheck } = require('../../autoUpdater');
 
-let mainWindow;
+// ── Konstanta ────────────────────────────────────────────────────────────────
+const isDev = !app.isPackaged;
+const VITE_DEV_SERVER_URL = 'http://localhost:5173';
+const PRELOAD_PATH = path.join(__dirname, '../../preload.js');
+const RENDERER_PATH = path.join(__dirname, '../../dist/renderer/index.html');
 
+let mainWindow = null;
+
+// ── Buat BrowserWindow ───────────────────────────────────────────────────────
 function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1200,
-        height: 800,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true
-        },
-        title: 'Drama Tool',
-        backgroundColor: '#1a1a2e'
-    });
+  mainWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 600,
+    title: 'DramaTool',
+    icon: path.join(__dirname, '../../assets/installer.ico'),
+    webPreferences: {
+      preload: PRELOAD_PATH,
+      contextIsolation: true,   // Wajib untuk keamanan
+      nodeIntegration: false,   // Wajib untuk keamanan
+      sandbox: false,           // Perlu false agar preload bisa require()
+    },
+    show: false, // Sembunyikan dulu sampai siap, hindari flash putih
+    backgroundColor: '#0f0f0f',
+  });
 
-    // Konten HTML sederhana untuk tampilan aplikasi
-    mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <meta charset="UTF-8">
-        <title>Drama Tool</title>
-        <style>
-            body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                color: white;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                height: 100vh;
-                margin: 0;
-                text-align: center;
-            }
-            h1 {
-                font-size: 48px;
-                background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-                -webkit-background-clip: text;
-                -webkit-text-fill-color: transparent;
-            }
-            p {
-                color: #aaa;
-                font-size: 18px;
-            }
-            .status {
-                margin-top: 20px;
-                padding: 10px 20px;
-                background: rgba(78,205,196,0.2);
-                border-radius: 8px;
-                display: inline-block;
-            }
-            .footer {
-                margin-top: 40px;
-                font-size: 12px;
-                color: #666;
-            }
-        </style>
-    </head>
-    <body>
-        <div>
-            <h1>🎬 DRAMA TOOL</h1>
-            <p>Video Generator + Planner Konten Drama China</p>
-            <div class="status">
-                ✅ Aplikasi Berjalan! | Versi 1.0.0
-            </div>
-            <div class="footer">
-                🚀 Fitur lengkap segera hadir
-            </div>
-        </div>
-    </body>
-    </html>
-    `)}`);
+  // Tampilkan window setelah konten siap
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    if (isDev) {
+      mainWindow.webContents.openDevTools();
+    }
+  });
+
+  // Load URL atau file HTML
+  if (isDev) {
+    mainWindow.loadURL(VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(RENDERER_PATH);
+  }
+
+  // Buka link eksternal di browser default, bukan di window Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
+// ── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
-    createWindow();
+  // Daftarkan semua IPC handler sebelum window dibuat
+  registerIpcHandlers();
+
+  createWindow();
+
+  // Inisialisasi auto updater setelah window siap tampil
+  mainWindow.once('ready-to-show', () => {
+    initAutoUpdater(mainWindow);
+    startPeriodicUpdateCheck();
+  });
+
+  // macOS: buat ulang window jika di-klik dari dock
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow();
+    }
+  });
 });
 
+// Tutup app saat semua window ditutup (Windows & Linux)
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') {
-        app.quit();
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
+});
+
+// ── Security: blokir navigasi ke URL eksternal ───────────────────────────────
+app.on('web-contents-created', (event, contents) => {
+  contents.on('will-navigate', (event, url) => {
+    const allowedOrigins = [
+      VITE_DEV_SERVER_URL,
+      'file://',
+    ];
+    const isAllowed = allowedOrigins.some(origin => url.startsWith(origin));
+    if (!isAllowed) {
+      event.preventDefault();
+      shell.openExternal(url);
     }
+  });
 });

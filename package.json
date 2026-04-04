@@ -4,11 +4,11 @@
   "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"electron .\"",
-    "build": "vite build",
+    "dev": "concurrently \"vite --config vite.config.js\" \"electron .\"",
+    "build": "vite build --config vite.config.js",
     "build:win": "npm run build && electron-builder --win --x64",
     "start": "electron .",
-    "preview": "vite preview"
+    "preview": "vite preview --config vite.config.js"
   },
   "dependencies": {
     "react": "^18.3.1",

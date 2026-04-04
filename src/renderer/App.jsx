@@ -1,48 +1,44 @@
 import React, { useState } from 'react';
-import Settings from '../../Settings';
-import UpdateNotification from '../../UpdateNotification';
+import VideoEditor from './components/VideoEditor';
+import WatermarkInpainting from './components/WatermarkInpainting';
+import SubtitleRemover from './components/SubtitleRemover';
+import ThumbnailGenerator from './components/ThumbnailGenerator';
+import VideoSplitter from './components/VideoSplitter';
+import './App.css';
 
-const App = () => {
-  const [activePage, setActivePage] = useState('home');
+function App() {
+    const [activeTab, setActiveTab] = useState('editor');
 
-  return (
-    <div className="app">
-      {/* Notifikasi update — selalu tampil di atas jika ada update */}
-      <UpdateNotification />
+    const tabs = [
+        { id: 'editor', name: '🎬 Video Editor', component: VideoEditor },
+        { id: 'watermark', name: '💧 Watermark', component: WatermarkInpainting },
+        { id: 'subtitle', name: '🗑️ Subtitle Remover', component: SubtitleRemover },
+        { id: 'thumbnail', name: '🖼️ Thumbnail', component: ThumbnailGenerator },
+        { id: 'splitter', name: '✂️ Video Splitter', component: VideoSplitter }
+    ];
 
-      {/* Navigasi sidebar */}
-      <div className="sidebar">
-        <div className="sidebar-logo">
-          <h1>🎬 DramaTool</h1>
+    const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component || VideoEditor;
+
+    return (
+        <div className="app">
+            <div className="sidebar">
+                <div className="logo">
+                    <h1>🎬 DRAMA TOOL</h1>
+                    <p>Video Generator</p>
+                </div>
+                <nav>
+                    {tabs.map(tab => (
+                        <div key={tab.id} className={`nav-item ${activeTab === tab.id ? 'active' : ''}`} onClick={() => setActiveTab(tab.id)}>
+                            {tab.name}
+                        </div>
+                    ))}
+                </nav>
+            </div>
+            <div className="main-content">
+                <ActiveComponent />
+            </div>
         </div>
-        <nav className="sidebar-nav">
-          <button
-            className={activePage === 'home' ? 'nav-item active' : 'nav-item'}
-            onClick={() => setActivePage('home')}
-          >
-            🏠 Beranda
-          </button>
-          <button
-            className={activePage === 'settings' ? 'nav-item active' : 'nav-item'}
-            onClick={() => setActivePage('settings')}
-          >
-            ⚙️ Pengaturan
-          </button>
-        </nav>
-      </div>
-
-      {/* Konten utama */}
-      <div className="main-content">
-        {activePage === 'home' && (
-          <div className="home-page">
-            <h2>Selamat Datang di DramaTool</h2>
-            <p>Pilih menu di sidebar untuk memulai.</p>
-          </div>
-        )}
-        {activePage === 'settings' && <Settings />}
-      </div>
-    </div>
-  );
-};
+    );
+}
 
 export default App;

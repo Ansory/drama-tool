@@ -2,39 +2,23 @@
   "name": "drama-tool",
   "version": "1.0.0",
   "description": "Video Generator + Planner Konten Drama China",
-  "author": "DramaTool Team",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "node scripts/build-win.js",
-    "build:mac": "node scripts/build-mac.js",
-    "build:linux": "node scripts/build-linux.js",
-    "installer:win": "makensis installer/DramaTool.nsi",
-    "package:all": "npm run build:win && npm run installer:win",
-    "dev": "cross-env NODE_ENV=development electron .",
-    "postinstall": "node scripts/post-install.js"
-  },
-  "dependencies": {
-    "electron": "^27.0.0",
-    "electron-store": "^8.1.0",
-    "electron-updater": "^6.1.7",
-    "sqlite3": "^5.1.6",
-    "axios": "^1.6.0",
-    "ffmpeg-static": "^5.2.0",
-    "node-fetch": "^3.3.2",
-    "python-shell": "^5.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "build:win": "electron-builder --win --x64"
   },
   "devDependencies": {
-    "@electron-forge/cli": "^7.3.0",
-    "@electron-forge/maker-deb": "^7.3.0",
-    "@electron-forge/maker-dmg": "^7.3.0",
-    "@electron-forge/maker-squirrel": "^7.3.0",
-    "@electron-forge/maker-zip": "^7.3.0",
-    "@vitejs/plugin-react": "^4.0.0",
-    "cross-env": "^7.0.3",
-    "electron-builder": "^24.6.4",
-    "vite": "^4.5.0"
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  },
+  "build": {
+    "appId": "com.dramatool.app",
+    "productName": "Drama Tool",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    }
   }
 }

@@ -4,6 +4,8 @@ import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
+  // root adalah folder tempat index.html berada (default: project root)
+  root: '.',
   base: './',
   build: {
     outDir: 'dist/renderer',
@@ -11,10 +13,9 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(__dirname, './src/renderer'),
     },
   },
-  // Vite dev server untuk mode development dengan Electron
   server: {
     port: 5173,
     strictPort: true,

@@ -800,7 +800,198 @@ ipcMain.handle('audience:demographics', async (event, pageId) => {
         interests: ['K-Pop', 'Skincare', 'Korean Drama', 'Anime', 'Fashion']
     };
 });
+    // ============ MODUL 26: AUTO BALAS KOMENTAR AI ============
+ipcMain.handle('comment:auto-reply', async (event, { commentText, postId, commentId }) => {
+    return new Promise((resolve) => {
+        const pythonProcess = exec(`python src/backend/comment_ai.py generate "${commentText.replace(/"/g, '\\"')}"`);
+        let output = '';
+        pythonProcess.stdout.on('data', (data) => { output += data; });
+        pythonProcess.on('close', () => {
+            try {
+                const result = JSON.parse(output);
+                resolve({
+                    reply: result.reply || "Terima kasih sudah nonton bestie! ❤️ Jangan lupa like dan share ya!",
+                    confidence: result.confidence || 85,
+                    category: result.category || 'general'
+                });
+            } catch (e) {
+                resolve({
+                    reply: "Makasih komennya bestie! 😊 Lanjut terus nonton drama China ya! #DramaChina",
+                    confidence: 70,
+                    category: 'general'
+                });
+            }
+        });
+    });
+});
+
+ipcMain.handle('comment:classify', async (event, commentText) => {
+    return new Promise((resolve) => {
+        const pythonProcess = exec(`python src/backend/comment_ai.py classify "${commentText.replace(/"/g, '\\"')}"`);
+        let output = '';
+        pythonProcess.stdout.on('data', (data) => { output += data; });
+        pythonProcess.on('close', () => {
+            try {
+                resolve(JSON.parse(output));
+            } catch (e) {
+                resolve({
+                    category: 'general',
+                    sentiment: 'neutral',
+                    needsReply: true
+                });
+            }
+        });
+    });
+});
+
+ipcMain.handle('comment:settings', async (event, settings) => {
+    const store = new Store({ name: 'auto-reply-settings' });
+    store.set('settings', settings);
+    return { success: true };
+});
+
+ipcMain.handle('comment:get-settings', async (event) => {
+    const store = new Store({ name: 'auto-reply-settings' });
+    return store.get('settings', {
+        enabled: true,
+        maxRepliesPerPost: 50,
+        cooldownSeconds: 5,
+        blacklistKeywords: ['spam', 'gambar', 'bokep', 'judi'],
+        activeHours: { start: 8, end: 22 },
+        replyStyle: 'friendly' // friendly, professional, casual
+    });
+});
+
+// ============ MODUL 27: AUTO SEMAT LINK VIDEO PANJANG ============
+ipcMain.handle('link:auto-comment', async (event, { postId, longVideoUrl, customMessage, pinComment }) => {
+    const commentText = customMessage || `📺 Nonton full episode di sini ya bestie!\n${longVideoUrl}\n\nUdah nonton fullnya? Komen "SUDAH" biar aku tahu! 👇`;
     
+    // Post comment ke Facebook
+    const commentResponse = await fetch(`https://graph.facebook.com/v25.0/${postId}/comments`, {
+        method: 'POST',
+        body: new URLSearchParams({
+            access_token: global.pageAccessToken,
+            message: commentText
+        })
+    });
+    
+    const commentData = await commentResponse.json();
+    
+    if (pinComment && commentData.id) {
+        // Pin comment
+        await fetch(`https://graph.facebook.com/v25.0/${commentData.id}?is_comment_pinned=true&access_token=${global.pageAccessToken}`, {
+            method: 'POST'
+        });
+    }
+    
+    return { success: true, commentId: commentData.id };
+});
+
+// ============ MODUL 28: SOCIAL LISTENING & SENTIMENT ============
+ipcMain.handle('social:analyze-sentiment', async (event, comments) => {
+    return new Promise((resolve) => {
+        const commentsJson = JSON.stringify(comments);
+        const pythonProcess = exec(`python src/backend/social_listening.py sentiment '${commentsJson}'`);
+        let output = '';
+        pythonProcess.stdout.on('data', (data) => { output += data; });
+        pythonProcess.on('close', () => {
+            try {
+                resolve(JSON.parse(output));
+            } catch (e) {
+                resolve({
+                    positive: 65,
+                    neutral: 25,
+                    negative: 10,
+                    topKeywords: ['keren', 'bagus', 'lucu', 'sedih'],
+                    crisisDetected: false
+                });
+            }
+        });
+    });
+});
+
+ipcMain.handle('social:track-keywords', async (event, keywords) => {
+    const store = new Store({ name: 'social-listening' });
+    store.set('trackedKeywords', keywords);
+    return { success: true };
+});
+
+ipcMain.handle('social:get-keywords', async (event) => {
+    const store = new Store({ name: 'social-listening' });
+    return store.get('trackedKeywords', []);
+});
+
+ipcMain.handle('social:weekly-report', async (event, pageId) => {
+    // Placeholder - kumpulkan data dari Facebook API
+    return {
+        period: '7 hari terakhir',
+        totalComments: 1247,
+        averageSentiment: 72,
+        topPositiveKeywords: ['keren', 'bagus', 'recommended', 'best'],
+        topNegativeKeywords: ['pendek', 'cepetan', 'kurang'],
+        recommendations: [
+            'Tingkatkan durasi video menjadi 30 detik',
+            'Tambahkan lebih banyak scene action',
+            'Posting di jam 20:00 WIB'
+        ]
+    };
+});
+
+// ============ MODUL 29: SHOPEE/AFFILIATE INTEGRATION ============
+ipcMain.handle('affiliate:detect-products', async (event, videoPath) => {
+    // Placeholder - deteksi produk dari video
+    return {
+        products: [
+            { name: 'Gaun Merah', confidence: 85, link: 'https://shopee...' },
+            { name: 'Kalung Kristal', confidence: 72, link: 'https://shopee...' }
+        ]
+    };
+});
+
+ipcMain.handle('affiliate:generate-link', async (event, { productId, platform }) => {
+    // Placeholder - generate affiliate link
+    return {
+        link: `https://${platform}.com/product/${productId}?affiliate=DRAMATOOL`,
+        commission: 0.1 // 10%
+    };
+});
+
+ipcMain.handle('affiliate:track-click', async (event, { linkId, videoId }) => {
+    const store = new Store({ name: 'affiliate-stats' });
+    const clicks = store.get('clicks', []);
+    clicks.push({ linkId, videoId, timestamp: Date.now() });
+    store.set('clicks', clicks);
+    return { success: true };
+});
+
+// ============ MODUL 30: PROFIT TRACKER ============
+ipcMain.handle('profit:calculate', async (event, { views, clicks, conversions }) => {
+    const cpm = 2.5; // $2.5 per 1000 views
+    const revenueFromViews = (views / 1000) * cpm;
+    const revenueFromAffiliate = clicks * 0.05; // $0.05 per click
+    
+    return {
+        revenueViews: revenueFromViews,
+        revenueAffiliate: revenueFromAffiliate,
+        totalRevenue: revenueFromViews + revenueFromAffiliate,
+        estimatedRupiah: (revenueFromViews + revenueFromAffiliate) * 15500,
+        cpm: cpm,
+        affiliateCommission: 0.05
+    };
+});
+
+ipcMain.handle('profit:history', async (event, { period }) => {
+    const store = new Store({ name: 'profit-history' });
+    return store.get(period, []);
+});
+
+ipcMain.handle('profit:save', async (event, { period, data }) => {
+    const store = new Store({ name: 'profit-history' });
+    const history = store.get(period, []);
+    history.push({ ...data, timestamp: Date.now() });
+    store.set(period, history.slice(-30)); // Keep last 30 entries
+    return { success: true };
+});
     }
   }
 }

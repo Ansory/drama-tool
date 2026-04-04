@@ -1,169 +1,136 @@
+/**
+ * autoUpdater.js
+ * Menangani semua logika auto-update di Electron main process.
+ * FIXED: Tambah handler get-version (async), get-skipped-versions,
+ *        dan skip-update menggunakan electron-store (bukan localStorage).
+ */
+
 const { autoUpdater } = require('electron-updater');
-const { dialog, BrowserWindow, Notification } = require('electron');
-const log = require('electron-log');
+const { ipcMain, shell, app } = require('electron');
 const Store = require('electron-store');
-
 const store = new Store();
-let updateCheckInterval = null;
-let updateInProgress = false;
 
-// Konfigurasi logging
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
-autoUpdater.autoDownload = false; // Manual download, biar user yang memilih
-autoUpdater.autoInstallOnAppQuit = true;
+let mainWindow = null;
 
-// Status update
-let updateAvailableInfo = null;
-let downloadProgress = 0;
+function initAutoUpdater(win) {
+  mainWindow = win;
 
-// Setup auto-updater
-function setupAutoUpdater(mainWindow) {
-    
-    // Cek update saat startup
-    autoUpdater.checkForUpdatesAndNotify();
-    
-    // Cek update setiap 6 jam
-    updateCheckInterval = setInterval(() => {
-        if (store.get('settings.autoUpdate', true)) {
-            autoUpdater.checkForUpdatesAndNotify();
-        }
-    }, 6 * 60 * 60 * 1000);
-    
-    // Event: Update tersedia
-    autoUpdater.on('update-available', (info) => {
-        updateAvailableInfo = info;
-        
-        // Kirim ke renderer
-        mainWindow.webContents.send('update-available', {
-            version: info.version,
-            releaseDate: info.releaseDate,
-            releaseNotes: info.releaseNotes
-        });
-        
-        // Tampilkan notifikasi
-        if (Notification.isSupported()) {
-            new Notification({
-                title: 'Update Tersedia!',
-                body: `Drama Tool versi ${info.version} tersedia. Klik untuk update.`,
-                icon: './assets/icon.png'
-            }).show();
-        }
-        
-        log.info(`Update available: ${info.version}`);
-    });
-    
-    // Event: Update tidak tersedia
-    autoUpdater.on('update-not-available', () => {
-        log.info('No update available');
-        mainWindow.webContents.send('update-not-available');
-    });
-    
-    // Event: Download progress
-    autoUpdater.on('download-progress', (progressObj) => {
-        downloadProgress = progressObj.percent;
-        
-        mainWindow.webContents.send('update-download-progress', {
-            percent: progressObj.percent,
-            bytesPerSecond: progressObj.bytesPerSecond,
-            transferred: progressObj.transferred,
-            total: progressObj.total
-        });
-        
-        log.info(`Download progress: ${progressObj.percent}%`);
-    });
-    
-    // Event: Update selesai di-download
-    autoUpdater.on('update-downloaded', (info) => {
-        log.info(`Update downloaded: ${info.version}`);
-        
-        mainWindow.webContents.send('update-downloaded', {
-            version: info.version
-        });
-        
-        // Tampilkan dialog restart
-        const result = dialog.showMessageBoxSync(mainWindow, {
-            type: 'info',
-            title: 'Update Siap Diinstall',
-            message: `Update Drama Tool versi ${info.version} telah didownload.`,
-            detail: 'Aplikasi akan restart untuk menyelesaikan instalasi.',
-            buttons: ['Install Sekarang', 'Nanti Saja'],
-            defaultId: 0,
-            cancelId: 1
-        });
-        
-        if (result === 0) {
-            autoUpdater.quitAndInstall();
-        }
-    });
-    
-    // Event: Error
-    autoUpdater.on('error', (err) => {
-        log.error('Auto-updater error:', err);
-        mainWindow.webContents.send('update-error', {
-            message: err.message
-        });
-    });
-    
-    // Event: Check update selesai
-    autoUpdater.on('checking-for-update', () => {
-        mainWindow.webContents.send('checking-for-update');
-    });
+  // ── Konfigurasi ───────────────────────────────────────────────────────────
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  // ── Event listeners dari electron-updater ─────────────────────────────────
+  autoUpdater.on('update-available', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', info);
+    }
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-download-progress', progress);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    if (mainWindow) {
+      mainWindow.webContents.send('update-error', err.message);
+    }
+  });
 }
 
-// Fungsi untuk memulai download update
-function downloadUpdate() {
-    if (updateInProgress) {
-        return { success: false, message: 'Update already in progress' };
+function registerIpcHandlers() {
+  // ── Config ──────────────────────────────────────────────────────────────
+  ipcMain.handle('get-config', () => {
+    return store.get('config', {
+      autoUpdate: true,
+      updateChannel: 'stable',
+      checkInterval: 6,
+    });
+  });
+
+  ipcMain.handle('update-config', (event, config) => {
+    store.set('config', config);
+
+    // Terapkan channel update langsung
+    if (config.updateChannel) {
+      autoUpdater.channel = config.updateChannel;
     }
-    
-    updateInProgress = true;
+    return true;
+  });
+
+  // FIXED: get-version sebagai IPC handler (async-safe)
+  ipcMain.handle('get-version', () => {
+    return app.getVersion();
+  });
+
+  // ── Update actions ────────────────────────────────────────────────────────
+  ipcMain.handle('check-for-updates', async () => {
+    try {
+      const result = await autoUpdater.checkForUpdates();
+      return {
+        updateAvailable: !!result?.updateInfo,
+        version: result?.updateInfo?.version,
+      };
+    } catch (err) {
+      console.error('Check for updates error:', err);
+      return { updateAvailable: false };
+    }
+  });
+
+  ipcMain.handle('download-update', () => {
     autoUpdater.downloadUpdate();
-    
-    return { success: true, message: 'Download started' };
-}
+  });
 
-// Fungsi untuk install update (restart app)
-function installUpdate() {
-    autoUpdater.quitAndInstall();
-}
+  ipcMain.handle('install-update', () => {
+    autoUpdater.quitAndInstall(false, true);
+  });
 
-// Fungsi untuk skip update (ignore version)
-function skipUpdate(version) {
-    store.set(`skippedVersion.${version}`, true);
-    store.set('skippedVersionTimestamp', Date.now());
-}
+  // FIXED: Simpan skipped versions di electron-store (bukan localStorage renderer)
+  ipcMain.handle('get-skipped-versions', () => {
+    return store.get('skippedVersions', []);
+  });
 
-// Fungsi untuk cek apakah versi di-skip
-function isVersionSkipped(version) {
-    return store.get(`skippedVersion.${version}`, false);
-}
-
-// Fungsi untuk manual check update
-function manualCheckUpdate() {
-    return autoUpdater.checkForUpdatesAndNotify();
-}
-
-// Fungsi untuk get download progress
-function getDownloadProgress() {
-    return downloadProgress;
-}
-
-// Cleanup
-function cleanupAutoUpdater() {
-    if (updateCheckInterval) {
-        clearInterval(updateCheckInterval);
-        updateCheckInterval = null;
+  ipcMain.handle('skip-update', (event, version) => {
+    const skipped = store.get('skippedVersions', []);
+    if (!skipped.includes(version)) {
+      skipped.push(version);
+      store.set('skippedVersions', skipped);
     }
+  });
+
+  // ── Utilitas ──────────────────────────────────────────────────────────────
+  ipcMain.handle('open-external', (event, url) => {
+    shell.openExternal(url);
+  });
 }
 
-module.exports = {
-    setupAutoUpdater,
-    downloadUpdate,
-    installUpdate,
-    skipUpdate,
-    isVersionSkipped,
-    manualCheckUpdate,
-    getDownloadProgress,
-    cleanupAutoUpdater
-};
+/**
+ * Cek update secara periodik sesuai interval dari config.
+ * Dipanggil dari main.js setelah app ready.
+ */
+function startPeriodicUpdateCheck() {
+  const config = store.get('config', { autoUpdate: true, checkInterval: 6 });
+
+  if (!config.autoUpdate) return;
+
+  const intervalMs = (config.checkInterval || 6) * 60 * 60 * 1000;
+
+  // Cek pertama kali setelah 30 detik app berjalan
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(console.error);
+  }, 30_000);
+
+  // Cek berikutnya sesuai interval
+  setInterval(() => {
+    autoUpdater.checkForUpdates().catch(console.error);
+  }, intervalMs);
+}
+
+module.exports = { initAutoUpdater, registerIpcHandlers, startPeriodicUpdateCheck };

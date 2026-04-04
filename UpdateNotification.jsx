@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import './UpdateNotification.css';
 
 const UpdateNotification = () => {
   const [updateInfo, setUpdateInfo] = useState(null);

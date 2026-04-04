@@ -30,85 +30,53 @@ env:
 
 jobs:
 
-  # ── JOB 1: Validasi ──────────────────────────────────────────────────────────
+  # JOB 1: Validasi
   validate:
-    name: "\u2705 Validasi Prasyarat"
+    name: "Validasi Prasyarat"
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout kode
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Cek file kode wajib ada
         run: |
-          echo "Mengecek file kode wajib..."
           MISSING=()
-
-          for f in \
-            "package.json" \
-            "preload.js" \
-            "autoUpdater.js" \
-            "gemini_load_balancer.py" \
-            "DramaTool.nsi" \
-            "src/main/main.js"; do
-            if [ ! -f "$f" ]; then
-              MISSING+=("TIDAK ADA: $f")
-            else
-              echo "OK: $f"
-            fi
+          for f in "package.json" "preload.js" "autoUpdater.js" "gemini_load_balancer.py" "DramaTool.nsi" "src/main/main.js"; do
+            if [ ! -f "$f" ]; then MISSING+=("TIDAK ADA: $f"); else echo "OK: $f"; fi
           done
-
           if [ ${#MISSING[@]} -gt 0 ]; then
-            echo "File kode berikut TIDAK DITEMUKAN:"
             printf '%s\n' "${MISSING[@]}"
             exit 1
           fi
-
-          echo "Mengecek assets installer..."
           for f in "assets/installer.ico" "assets/banner.bmp" "assets/LICENSE.txt"; do
-            if [ ! -f "$f" ]; then
-              echo "WARNING: $f tidak ada - akan dibuat placeholder otomatis"
-            else
-              echo "OK: $f"
-            fi
+            if [ ! -f "$f" ]; then echo "WARNING: $f - akan dibuat placeholder"; else echo "OK: $f"; fi
           done
-
           echo "Validasi selesai."
 
       - name: Validasi package.json
         run: |
           node -e "
-            const pkg = require('./package.json');
-            const required = ['name','version','main','scripts'];
-            const missing = required.filter(k => !pkg[k]);
-            if (missing.length) {
-              console.error('package.json kekurangan field:', missing.join(', '));
-              process.exit(1);
-            }
-            if (!pkg.scripts.build) {
-              console.error('package.json tidak punya script build');
-              process.exit(1);
-            }
-            console.log('package.json valid, versi:', pkg.version);
+            const p = require('./package.json');
+            if (!p.scripts || !p.scripts.build) { console.error('Tidak ada script build'); process.exit(1); }
+            console.log('OK versi:', p.version);
           "
 
-  # ── JOB 2: Build Python Backend ──────────────────────────────────────────────
+  # JOB 2: Build Python
   build-python:
     name: "Build Python Backend"
     runs-on: windows-latest
     needs: validate
-
     steps:
       - name: Checkout kode
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Python ${{ env.PYTHON_VERSION }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v5.4.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Cache pip packages
-        uses: actions/cache@v4
+        uses: actions/cache@v4.2.3
         with:
           path: ~\AppData\Local\pip\Cache
           key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}
@@ -119,51 +87,38 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller schedule requests
-          if (Test-Path "backend/requirements.txt") {
-            pip install -r backend/requirements.txt
-          }
+          if (Test-Path "backend/requirements.txt") { pip install -r backend/requirements.txt }
 
       - name: Build gemini_load_balancer.py ke .exe
-        run: |
-          pyinstaller `
-            --onefile `
-            --name gemini_load_balancer `
-            --clean `
-            gemini_load_balancer.py
+        run: pyinstaller --onefile --name gemini_load_balancer --clean gemini_load_balancer.py
 
       - name: Verifikasi hasil build Python
         run: |
-          if (-not (Test-Path "dist/gemini_load_balancer.exe")) {
-            Write-Error "gemini_load_balancer.exe tidak ditemukan"
-            exit 1
-          }
-          $size = (Get-Item "dist/gemini_load_balancer.exe").Length / 1MB
-          Write-Host "OK: gemini_load_balancer.exe ($([math]::Round($size, 1)) MB)"
+          if (-not (Test-Path "dist/gemini_load_balancer.exe")) { Write-Error "exe tidak ditemukan"; exit 1 }
+          Write-Host "OK: $([math]::Round((Get-Item dist/gemini_load_balancer.exe).Length/1MB,1)) MB"
 
       - name: Upload artifact Python backend
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: python-backend
           path: dist/gemini_load_balancer.exe
           retention-days: 1
 
-  # ── JOB 3: Build Electron + NSIS ─────────────────────────────────────────────
+  # JOB 3: Build Electron + NSIS
   build-electron:
     name: "Build Electron + NSIS Installer"
     runs-on: windows-latest
     needs: build-python
-
     outputs:
       installer_name: ${{ steps.find-installer.outputs.INSTALLER_NAME }}
       installer_path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
       app_version: ${{ steps.get-version.outputs.VERSION }}
-
     steps:
       - name: Checkout kode
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Setup Node.js ${{ env.NODE_VERSION }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v4.3.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -171,54 +126,127 @@ jobs:
         run: npm install
 
       - name: Download Python backend
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.2.1
         with:
           name: python-backend
           path: backend/
 
-      - name: Verifikasi backend tersedia untuk NSIS
+      - name: Verifikasi backend tersedia
         shell: pwsh
         run: |
-          if (-not (Test-Path "backend/gemini_load_balancer.exe")) {
-            Write-Error "backend/gemini_load_balancer.exe tidak ditemukan"
-            exit 1
-          }
-          $size = (Get-Item "backend/gemini_load_balancer.exe").Length / 1MB
-          Write-Host "OK: backend/gemini_load_balancer.exe ($([math]::Round($size,1)) MB)"
+          if (-not (Test-Path "backend/gemini_load_balancer.exe")) { Write-Error "backend exe tidak ditemukan"; exit 1 }
+          Write-Host "OK: $([math]::Round((Get-Item backend/gemini_load_balancer.exe).Length/1MB,1)) MB"
 
       - name: Ambil versi dari package.json
         id: get-version
         run: |
-          $version = node -e "console.log(require('./package.json').version)"
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Versi: $version"
+          $v = node -e "console.log(require('./package.json').version)"
+          echo "VERSION=$v" >> $env:GITHUB_OUTPUT
 
-      - name: Generate placeholder assets (jika belum ada di repo)
+      - name: Generate file renderer yang hilang
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path src/renderer | Out-Null
+
+          if (-not (Test-Path "src/renderer/main.jsx")) {
+            Write-Host "Generate src/renderer/main.jsx..."
+            $lines = @(
+              'import React from "react";',
+              'import { createRoot } from "react-dom/client";',
+              'import App from "./App";',
+              'import "./index.css";',
+              'createRoot(document.getElementById("root")).render(<React.StrictMode><App /></React.StrictMode>);'
+            )
+            $lines | Set-Content src/renderer/main.jsx -Encoding utf8
+          }
+
+          if (-not (Test-Path "src/renderer/App.jsx")) {
+            Write-Host "Generate src/renderer/App.jsx..."
+            $lines = @(
+              'import React, { useState } from "react";',
+              'import Settings from "../../Settings";',
+              'import UpdateNotification from "../../UpdateNotification";',
+              'const App = () => {',
+              '  const [page, setPage] = useState("home");',
+              '  return (',
+              '    <div className="app">',
+              '      <UpdateNotification />',
+              '      <div className="sidebar">',
+              '        <div className="sidebar-logo"><h1>DramaTool</h1></div>',
+              '        <nav className="sidebar-nav">',
+              '          <button className={page==="home"?"nav-item active":"nav-item"} onClick={()=>setPage("home")}>Beranda</button>',
+              '          <button className={page==="settings"?"nav-item active":"nav-item"} onClick={()=>setPage("settings")}>Pengaturan</button>',
+              '        </nav>',
+              '      </div>',
+              '      <div className="main-content">',
+              '        {page==="home" && <div className="home-page"><h2>Selamat Datang</h2></div>}',
+              '        {page==="settings" && <Settings />}',
+              '      </div>',
+              '    </div>',
+              '  );',
+              '};',
+              'export default App;'
+            )
+            $lines | Set-Content src/renderer/App.jsx -Encoding utf8
+          }
+
+          if (-not (Test-Path "src/renderer/index.css")) {
+            Write-Host "Generate src/renderer/index.css..."
+            $lines = @(
+              '* { margin:0; padding:0; box-sizing:border-box; }',
+              'body { font-family:system-ui; background:#0f0f0f; color:#f0f0f0; height:100vh; overflow:hidden; }',
+              '.app { display:flex; height:100vh; }',
+              '.sidebar { width:220px; background:#141414; border-right:1px solid #2a2a2a; padding:16px 0; }',
+              '.sidebar-logo { padding:0 20px 16px; } .sidebar-logo h1 { font-size:18px; }',
+              '.sidebar-nav { display:flex; flex-direction:column; gap:2px; padding:8px; }',
+              '.nav-item { background:none; border:none; color:#a0a0a0; text-align:left; padding:10px 12px; border-radius:8px; cursor:pointer; font-size:14px; }',
+              '.nav-item.active { background:#1a73e8; color:#fff; }',
+              '.main-content { flex:1; overflow-y:auto; padding:32px; }'
+            )
+            $lines | Set-Content src/renderer/index.css -Encoding utf8
+          }
+
+          if (-not (Test-Path "index.html")) {
+            Write-Host "Generate index.html..."
+            $lines = @(
+              '<!DOCTYPE html>',
+              '<html lang="id">',
+              '  <head>',
+              '    <meta charset="UTF-8" />',
+              '    <meta name="viewport" content="width=device-width, initial-scale=1.0" />',
+              '    <title>DramaTool</title>',
+              '  </head>',
+              '  <body>',
+              '    <div id="root"></div>',
+              '    <script type="module" src="./src/renderer/main.jsx"></script>',
+              '  </body>',
+              '</html>'
+            )
+            $lines | Set-Content index.html -Encoding utf8
+          }
+
+          # Hapus vite.config.js lama (keduanya - case insensitive Windows)
+          Get-ChildItem -Filter "vite.config.js" | Remove-Item -Force -ErrorAction SilentlyContinue
+          Write-Host "OK: vite.config.js lama dihapus jika ada" 
+
+          Write-Host "OK: semua file renderer siap"
+
+      - name: Generate placeholder assets
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path assets | Out-Null
-
           if (-not (Test-Path "assets/installer.ico")) {
-            Write-Host "Membuat placeholder installer.ico..."
-            magick convert -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp_icon.png
-            magick convert assets/temp_icon.png -define icon:auto-resize="256,128,64,48,32,16" assets/installer.ico
-            Remove-Item assets/temp_icon.png -ErrorAction SilentlyContinue
-            Write-Host "OK: installer.ico dibuat"
-          } else {
-            Write-Host "OK: assets/installer.ico sudah ada"
+            magick convert -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
+            magick convert assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/installer.ico
+            Remove-Item assets/temp.png -ErrorAction SilentlyContinue
+            Write-Host "OK: installer.ico"
           }
-
           if (-not (Test-Path "assets/banner.bmp")) {
-            Write-Host "Membuat placeholder banner.bmp..."
             magick convert -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
-            Write-Host "OK: banner.bmp dibuat (164x314px)"
-          } else {
-            Write-Host "OK: assets/banner.bmp sudah ada"
+            Write-Host "OK: banner.bmp"
           }
-
           if (-not (Test-Path "assets/LICENSE.txt")) {
-            Write-Host "Membuat placeholder LICENSE.txt..."
-            $license = @(
+            $lic = @(
               "MIT License",
               "",
               "Copyright (c) 2026 DramaTool Team",
@@ -233,14 +261,10 @@ jobs:
               "The above copyright notice and this permission notice shall be included in all",
               "copies or substantial portions of the Software.",
               "",
-              "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR",
-              "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,",
-              "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
+              "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND."
             )
-            $license | Set-Content -Path assets/LICENSE.txt -Encoding utf8
-            Write-Host "OK: LICENSE.txt dibuat"
-          } else {
-            Write-Host "OK: assets/LICENSE.txt sudah ada"
+            $lic | Set-Content assets/LICENSE.txt -Encoding utf8
+            Write-Host "OK: LICENSE.txt"
           }
 
       - name: Build React / frontend (Vite)
@@ -249,9 +273,6 @@ jobs:
       - name: Build Electron installer Windows (NSIS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Code signing (opsional - uncomment jika punya sertifikat):
-          # CSC_LINK: ${{ secrets.CSC_LINK }}
-          # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npm run build:win
 
       - name: Cari file installer hasil build
@@ -259,59 +280,49 @@ jobs:
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path dist -Filter "*Setup*.exe" -Recurse |
-            Where-Object { $_.FullName -notlike "*win-unpacked*" } |
-            Select-Object -First 1
-
+            Where-Object { $_.FullName -notlike "*win-unpacked*" } | Select-Object -First 1
           if (-not $installer) {
             $installer = Get-ChildItem -Path dist -Filter "*.exe" -Recurse |
-              Where-Object { $_.FullName -notlike "*win-unpacked*" } |
-              Select-Object -First 1
+              Where-Object { $_.FullName -notlike "*win-unpacked*" } | Select-Object -First 1
           }
-
-          if (-not $installer) {
-            Write-Error "Tidak ada installer .exe ditemukan di dist/"
-            Get-ChildItem -Path dist -Recurse | Select-Object FullName
-            exit 1
-          }
-
+          if (-not $installer) { Write-Error "Installer tidak ditemukan"; exit 1 }
           echo "INSTALLER_PATH=$($installer.FullName)" >> $env:GITHUB_OUTPUT
           echo "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_OUTPUT
-          Write-Host "OK: $($installer.Name) ($([math]::Round($installer.Length/1MB,1)) MB)"
+          Write-Host "OK: $($installer.Name)"
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: windows-installer
           path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
           retention-days: 7
 
       - name: Upload latest.yml artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: update-manifest
           path: dist/latest.yml
           retention-days: 7
         continue-on-error: true
 
-  # ── JOB 4: Publish GitHub Release ────────────────────────────────────────────
+  # JOB 4: Release
   release:
     name: "Publish GitHub Release"
     runs-on: ubuntu-latest
     needs: build-electron
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-
     steps:
       - name: Checkout kode
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4.2.2
 
       - name: Download installer
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.2.1
         with:
           name: windows-installer
           path: release/
 
       - name: Download update manifest
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v4.2.1
         with:
           name: update-manifest
           path: release/
@@ -320,41 +331,17 @@ jobs:
       - name: Tentukan info rilis
         id: release-info
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            VERSION="${GITHUB_REF#refs/tags/}"
-          else
-            VERSION="v${{ needs.build-electron.outputs.app_version }}"
-          fi
-
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then VERSION="${GITHUB_REF#refs/tags/}"; else VERSION="v${{ needs.build-electron.outputs.app_version }}"; fi
           CHANNEL="${{ github.event.inputs.channel || 'stable' }}"
-
-          if [[ "$VERSION" == *"beta"* ]] || [[ "$VERSION" == *"dev"* ]] || [[ "$CHANNEL" != "stable" ]]; then
-            PRERELEASE="true"
-          else
-            PRERELEASE="false"
-          fi
-
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DRAFT="${{ github.event.inputs.draft || 'true' }}"
-          else
-            DRAFT="false"
-          fi
-
+          if [[ "$VERSION" == *"beta"* ]] || [[ "$VERSION" == *"dev"* ]] || [[ "$CHANNEL" != "stable" ]]; then PRERELEASE="true"; else PRERELEASE="false"; fi
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then DRAFT="${{ github.event.inputs.draft || 'true' }}"; else DRAFT="false"; fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "PRERELEASE=$PRERELEASE" >> $GITHUB_OUTPUT
           echo "DRAFT=$DRAFT" >> $GITHUB_OUTPUT
           echo "CHANNEL=$CHANNEL" >> $GITHUB_OUTPUT
 
-          echo "Versi   : $VERSION"
-          echo "Channel : $CHANNEL"
-          echo "Pre-rel : $PRERELEASE"
-          echo "Draft   : $DRAFT"
-
-      - name: Lihat isi folder release
-        run: ls -lh release/
-
       - name: Buat GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.2.1
         with:
           tag_name: ${{ steps.release-info.outputs.VERSION }}
           name: "DramaTool ${{ steps.release-info.outputs.VERSION }}"
@@ -367,15 +354,15 @@ jobs:
             **Channel:** `${{ steps.release-info.outputs.CHANNEL }}`
 
             ### Cara Install
-            1. Download file `DramaTool-Setup-*.exe` di bawah
-            2. Jalankan installer sebagai Administrator
+            1. Download file DramaTool-Setup-*.exe di bawah
+            2. Jalankan sebagai Administrator
             3. Ikuti petunjuk instalasi
 
             ### Update Otomatis
-            Jika sudah install versi sebelumnya, aplikasi akan mendeteksi update ini otomatis saat startup atau setiap 6 jam sekali.
+            Aplikasi akan mendeteksi update ini otomatis saat startup.
 
-            ### Gemini Load Balancer
-            Backend Python sudah ter-bundle di dalam installer. Tidak perlu install Python terpisah.
+            ### Catatan
+            Backend Python sudah ter-bundle, tidak perlu install Python terpisah.
           files: |
             release/*.exe
             release/latest.yml

@@ -1,10 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath, URL } from 'url';
 
 export default defineConfig({
   plugins: [react()],
-  // root adalah folder tempat index.html berada (default: project root)
   root: '.',
   base: './',
   build: {
@@ -13,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src/renderer'),
+      '@': fileURLToPath(new URL('./src/renderer', import.meta.url)),
     },
   },
   server: {

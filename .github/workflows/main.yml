@@ -188,6 +188,16 @@ jobs:
           name: python-backend
           path: backend/
 
+      - name: Verifikasi backend tersedia untuk NSIS
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "backend/gemini_load_balancer.exe")) {
+            Write-Error "❌ backend/gemini_load_balancer.exe tidak ditemukan"
+            exit 1
+          }
+          $size = (Get-Item "backend/gemini_load_balancer.exe").Length / 1MB
+          Write-Host "✅ backend/gemini_load_balancer.exe ($([math]::Round($size,1)) MB) siap"
+
       - name: Ambil versi dari package.json
         id: get-version
         run: |

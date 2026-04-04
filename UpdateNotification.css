@@ -1,0 +1,139 @@
+.update-notification {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 360px;
+    background: linear-gradient(135deg, #1e1e2e 0%, #2a2a3e 100%);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    border-left: 4px solid #ff6b6b;
+    z-index: 10000;
+    animation: slideIn 0.3s ease-out;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.update-notification.available {
+    border-left-color: #ff6b6b;
+}
+
+.update-notification.downloading {
+    border-left-color: #4ecdc4;
+}
+
+.update-notification.installing {
+    border-left-color: #45b7d1;
+}
+
+.update-icon {
+    font-size: 32px;
+    float: left;
+    margin-right: 16px;
+}
+
+.update-content {
+    overflow: hidden;
+}
+
+.update-content h3 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+    color: #fff;
+}
+
+.update-content p {
+    margin: 0 0 8px 0;
+    font-size: 13px;
+    color: #aaa;
+}
+
+.update-content details {
+    margin-top: 8px;
+}
+
+.update-content summary {
+    font-size: 12px;
+    color: #4ecdc4;
+    cursor: pointer;
+}
+
+.release-notes {
+    margin-top: 8px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #ccc;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.progress-bar {
+    margin-top: 8px;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4ecdc4, #45b7d1);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.update-actions {
+    margin-top: 12px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.update-actions button {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.btn-primary {
+    background: #ff6b6b;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #ff5252;
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.btn-text {
+    background: transparent;
+    color: #888;
+}
+
+.btn-text:hover {
+    color: #ff6b6b;
+}

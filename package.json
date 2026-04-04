@@ -48,12 +48,13 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerScript": "DramaTool.nsi"
+      "script": "DramaTool.nsi"
     },
     "publish": {
       "provider": "github",
       "owner": "Ansory",
       "repo": "drama-tool"
     }
-  }
+  },
+  "author": "DramaTool Team"
 }

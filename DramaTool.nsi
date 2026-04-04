@@ -117,14 +117,10 @@ Section "FFmpeg" SEC02
 SectionEnd
 
 Section "Python Runtime" SEC03
-  SetOutPath "$INSTDIR\python"
-  File /r "..\python\*.*"
-
+  ; Python sudah di-bundle via PyInstaller menjadi gemini_load_balancer.exe
+  ; Tidak perlu install Python terpisah — cukup copy .exe dari backend/
   SetOutPath "$INSTDIR\backend"
   File /r "..\backend\*.*"
-
-  ; Install Python packages
-  nsExec::ExecToLog '"$INSTDIR\python\python.exe" -m pip install -r "$INSTDIR\backend\requirements.txt"'
 SectionEnd
 
 ; FIXED: Hapus "SectionIn RO" — CUDA adalah fitur opsional, user harus bisa pilih

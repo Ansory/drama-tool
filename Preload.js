@@ -1,41 +1,31 @@
-/**
- * preload.js
- * Jembatan aman antara Electron main process dan React renderer.
- * FIXED: Ekspos getVersion() sebagai async, tambah getSkippedVersions()
- *        agar UpdateNotification tidak perlu pakai localStorage.
- */
-
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electron', {
-
-  // ── Config ──────────────────────────────────────────────────────────────
-  getConfig: () => ipcRenderer.invoke('get-config'),
-  updateConfig: (config) => ipcRenderer.invoke('update-config', config),
-
-  // ── Versi ────────────────────────────────────────────────────────────────
-  // FIXED: Dibuat async agar Settings.jsx bisa await sebelum render
-  getVersion: () => ipcRenderer.invoke('get-version'),
-
-  // ── Update ───────────────────────────────────────────────────────────────
-  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-  downloadUpdate: () => ipcRenderer.invoke('download-update'),
-  installUpdate: () => ipcRenderer.invoke('install-update'),
-
-  // FIXED: Ganti localStorage dengan penyimpanan di main process via electron-store
-  getSkippedVersions: () => ipcRenderer.invoke('get-skipped-versions'),
-  skipUpdate: (version) => ipcRenderer.invoke('skip-update', version),
-
-  // ── Update event listeners ────────────────────────────────────────────────
-  onUpdateAvailable: (callback) =>
-    ipcRenderer.on('update-available', callback),
-  onUpdateDownloadProgress: (callback) =>
-    ipcRenderer.on('update-download-progress', callback),
-  onUpdateDownloaded: (callback) =>
-    ipcRenderer.on('update-downloaded', callback),
-  onUpdateError: (callback) =>
-    ipcRenderer.on('update-error', callback),
-
-  // ── Utilitas ─────────────────────────────────────────────────────────────
-  openExternal: (url) => ipcRenderer.invoke('open-external', url),
+    // Video Generator (Modul 1)
+    videoGetInfo: (path) => ipcRenderer.invoke('video:get-info', path),
+    videoCrop: (options) => ipcRenderer.invoke('video:crop', options),
+    videoResize: (options) => ipcRenderer.invoke('video:resize', options),
+    videoAddSubtitle: (options) => ipcRenderer.invoke('video:add-subtitle', options),
+    videoChangeSpeed: (options) => ipcRenderer.invoke('video:change-speed', options),
+    
+    // Watermark (Modul 2)
+    watermarkDetect: (path) => ipcRenderer.invoke('watermark:detect', path),
+    watermarkRemove: (options) => ipcRenderer.invoke('watermark:remove', options),
+    watermarkAdd: (options) => ipcRenderer.invoke('watermark:add', options),
+    
+    // Subtitle Remover (Modul 3)
+    subtitleDetect: (path) => ipcRenderer.invoke('subtitle:detect', path),
+    subtitleRemove: (options) => ipcRenderer.invoke('subtitle:remove', options),
+    
+    // Thumbnail Generator (Modul 4)
+    thumbnailExtract: (options) => ipcRenderer.invoke('thumbnail:extract', options),
+    thumbnailAddText: (options) => ipcRenderer.invoke('thumbnail:add-text', options),
+    
+    // Video Splitter (Modul 5)
+    videoSplitScenes: (options) => ipcRenderer.invoke('video:split-scenes', options),
+    videoDetectScenes: (path) => ipcRenderer.invoke('video:detect-scenes', path),
+    
+    // Utils
+    openDialog: (options) => ipcRenderer.invoke('dialog:open', options),
+    saveDialog: (options) => ipcRenderer.invoke('dialog:save', options)
 });

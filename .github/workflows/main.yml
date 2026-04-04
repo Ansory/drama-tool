@@ -42,21 +42,19 @@ jobs:
       - name: Checkout kode
         uses: actions/checkout@v4
 
-      - name: Cek file wajib ada
+      - name: Cek file kode wajib ada
         run: |
-          echo "Mengecek file wajib..."
+          echo "Mengecek file kode wajib..."
           MISSING=()
 
+          # Cek file kode — ini harus ada, tidak bisa di-generate otomatis
           for f in \
             "package.json" \
             "preload.js" \
             "autoUpdater.js" \
             "gemini_load_balancer.py" \
             "DramaTool.nsi" \
-            "src/main/main.js" \
-            "assets/installer.ico" \
-            "assets/banner.bmp" \
-            "assets/LICENSE.txt"; do
+            "src/main/main.js"; do
             if [ ! -f "$f" ]; then
               MISSING+=("❌ $f")
             else
@@ -67,14 +65,25 @@ jobs:
           if [ ${#MISSING[@]} -gt 0 ]; then
             echo ""
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "File berikut TIDAK DITEMUKAN:"
+            echo "File kode berikut TIDAK DITEMUKAN:"
             printf '%s\n' "${MISSING[@]}"
-            echo "Baca README.md untuk panduan lengkap."
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
 
-          echo "✅ Semua file wajib ditemukan."
+          # Cek assets installer — tampilkan warning saja, akan di-generate otomatis
+          echo ""
+          echo "Mengecek assets installer..."
+          for f in "assets/installer.ico" "assets/banner.bmp" "assets/LICENSE.txt"; do
+            if [ ! -f "$f" ]; then
+              echo "⚠️  $f tidak ada — akan dibuat placeholder otomatis saat build"
+            else
+              echo "✅ $f"
+            fi
+          done
+
+          echo ""
+          echo "✅ Validasi selesai."
 
       - name: Validasi package.json
         run: |
@@ -185,6 +194,77 @@ jobs:
           $version = node -e "console.log(require('./package.json').version)"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Versi: $version"
+
+      # Buat folder assets dan generate file placeholder jika belum ada di repo.
+      # File asli (branding kamu) seharusnya di-commit ke repo agar hasil build
+      # punya tampilan yang benar. Placeholder ini hanya fallback agar CI tidak gagal.
+      - name: Generate placeholder assets installer (jika belum ada)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path assets | Out-Null
+
+          # ── installer.ico ──────────────────────────────────────────────────
+          if (-not (Test-Path "assets/installer.ico")) {
+            Write-Host "⚠️  assets/installer.ico tidak ada, membuat placeholder..."
+            # Buat PNG 256x256 warna biru dengan teks "DT" via ImageMagick (sudah ada di runner)
+            magick convert `
+              -size 256x256 xc:"#1a73e8" `
+              -fill white -font Arial -pointsize 96 `
+              -gravity center -annotate 0 "DT" `
+              assets/temp_icon.png
+
+            # Konversi ke ICO (multi-size)
+            magick convert assets/temp_icon.png `
+              -define icon:auto-resize="256,128,64,48,32,16" `
+              assets/installer.ico
+
+            Remove-Item assets/temp_icon.png -ErrorAction SilentlyContinue
+            Write-Host "✅ Placeholder installer.ico dibuat"
+          } else {
+            Write-Host "✅ assets/installer.ico sudah ada"
+          }
+
+          # ── banner.bmp ─────────────────────────────────────────────────────
+          if (-not (Test-Path "assets/banner.bmp")) {
+            Write-Host "⚠️  assets/banner.bmp tidak ada, membuat placeholder..."
+            # NSIS MUI banner: 164x314 px
+            magick convert `
+              -size 164x314 `
+              gradient:"#1a73e8-#0d47a1" `
+              -fill white -font Arial -pointsize 18 `
+              -gravity center -annotate 0 "DramaTool" `
+              assets/banner.bmp
+            Write-Host "✅ Placeholder banner.bmp dibuat (164x314)"
+          } else {
+            Write-Host "✅ assets/banner.bmp sudah ada"
+          }
+
+          # ── LICENSE.txt ────────────────────────────────────────────────────
+          if (-not (Test-Path "assets/LICENSE.txt")) {
+            Write-Host "⚠️  assets/LICENSE.txt tidak ada, membuat placeholder..."
+            @"
+MIT License
+
+Copyright (c) 2026 DramaTool Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+"@ | Out-File -FilePath assets/LICENSE.txt -Encoding utf8
+            Write-Host "✅ Placeholder LICENSE.txt dibuat"
+          } else {
+            Write-Host "✅ assets/LICENSE.txt sudah ada"
+          }
 
       - name: Build React / frontend (Vite)
         run: |

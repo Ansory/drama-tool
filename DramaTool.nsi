@@ -1,6 +1,6 @@
 ; DramaTool NSIS Installer Script
-; Untuk Windows
-; FIXED: Section CUDA tidak lagi SectionIn RO, asset files direferensikan dengan benar
+; Variabel PRODUCT_NAME, VERSION, MUI_ICON, dll sudah dikirim oleh electron-builder
+; via command line -- JANGAN !define ulang variabel tersebut di sini
 
 ;--------------------------------
 ; Includes
@@ -10,20 +10,19 @@
 !include "Sections.nsh"
 
 ;--------------------------------
-; General
-!define PRODUCT_NAME        "DramaTool"
-!define PRODUCT_VERSION     "1.0.0"
-!define PRODUCT_PUBLISHER   "DramaTool Team"
+; Konstanta internal (tidak bentrok dengan electron-builder)
 !define PRODUCT_WEB_SITE    "https://github.com/Ansory/drama-tool"
 !define PRODUCT_DIR_REGKEY  "Software\Microsoft\Windows\CurrentVersion\App Paths\DramaTool.exe"
 !define PRODUCT_UNINST_KEY  "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}"
 !define PRODUCT_UNINST_ROOT_KEY "HKLM"
 
-Name    "${PRODUCT_NAME} ${PRODUCT_VERSION}"
-OutFile "DramaTool-Setup-${PRODUCT_VERSION}.exe"
+;--------------------------------
+; General
+Name    "${PRODUCT_NAME} ${VERSION}"
+OutFile "DramaTool-Setup-${VERSION}.exe"
 
-InstallDir          "$PROGRAMFILES\DramaTool"
-InstallDirRegKey    HKLM "${PRODUCT_DIR_REGKEY}" ""
+InstallDir       "$PROGRAMFILES\${PRODUCT_NAME}"
+InstallDirRegKey HKLM "${PRODUCT_DIR_REGKEY}" ""
 ShowInstDetails     show
 ShowUnInstDetails   show
 RequestExecutionLevel admin
@@ -32,23 +31,16 @@ RequestExecutionLevel admin
 ; Interface Settings
 !define MUI_ABORTWARNING
 
-; FIXED: Referensikan asset dari folder assets/ yang ada di repo
-; Pastikan file-file ini ada sebelum build:
-;   assets/installer.ico
-;   assets/banner.bmp
-;   assets/LICENSE.txt
-!define MUI_ICON                        "assets\installer.ico"
-!define MUI_UNICON                      "assets\installer.ico"
-!define MUI_WELCOMEFINISHPAGE_BITMAP    "assets\banner.bmp"
+; MUI_ICON dan MUI_UNICON sudah dikirim electron-builder via command line
+; MUI_WELCOMEFINISHPAGE_BITMAP juga sudah dikirim
 !define MUI_HEADERIMAGE
-!define MUI_HEADERIMAGE_BITMAP          "assets\banner.bmp"
+!define MUI_HEADERIMAGE_BITMAP "${MUI_WELCOMEFINISHPAGE_BITMAP}"
 
 ;--------------------------------
 ; Pages
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE "assets\LICENSE.txt"
-!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_DIRECTORY
+!insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH
 
@@ -64,16 +56,15 @@ RequestExecutionLevel admin
 
 ;--------------------------------
 ; Section Descriptions
-LangString DESC_SEC01 ${LANG_ENGLISH}   "DramaTool main application files."
-LangString DESC_SEC02 ${LANG_ENGLISH}   "FFmpeg for video processing."
-LangString DESC_SEC03 ${LANG_ENGLISH}   "Python runtime and required packages."
-LangString DESC_SEC04 ${LANG_ENGLISH}   "Optional CUDA support for GPU acceleration."
+LangString DESC_SEC01 ${LANG_ENGLISH} "DramaTool main application files."
+LangString DESC_SEC02 ${LANG_ENGLISH} "FFmpeg for video processing."
+LangString DESC_SEC03 ${LANG_ENGLISH} "Python backend (Gemini Load Balancer)."
+LangString DESC_SEC04 ${LANG_ENGLISH} "Optional CUDA support for GPU acceleration."
 
 ;--------------------------------
 ; Installer Sections
 
 Section "DramaTool (Required)" SEC01
-  ; Section ini wajib — tidak bisa di-uncheck
   SectionIn RO
 
   SetOutPath "$INSTDIR"
@@ -82,21 +73,18 @@ Section "DramaTool (Required)" SEC01
   SetOutPath "$INSTDIR\resources"
   File /r "..\resources\*.*"
 
-  ; Buat shortcut di Start Menu dan Desktop
-  CreateDirectory "$SMPROGRAMS\DramaTool"
-  CreateShortCut "$SMPROGRAMS\DramaTool\DramaTool.lnk" "$INSTDIR\DramaTool.exe"
-  CreateShortCut "$DESKTOP\DramaTool.lnk" "$INSTDIR\DramaTool.exe"
+  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
+  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_FILENAME}.exe"
+  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_FILENAME}.exe"
 
-  ; Registry untuk uninstall
-  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\DramaTool.exe"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName"      "$(^Name)"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString"  "$INSTDIR\uninst.exe"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon"      "$INSTDIR\DramaTool.exe"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"   "${PRODUCT_VERSION}"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout"     "${PRODUCT_WEB_SITE}"
-  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher"        "${PRODUCT_PUBLISHER}"
+  WriteRegStr HKLM "${PRODUCT_DIR_REGKEY}" "" "$INSTDIR\${PRODUCT_FILENAME}.exe"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayName"     "$(^Name)"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "UninstallString" "$INSTDIR\uninst.exe"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayIcon"     "$INSTDIR\${PRODUCT_FILENAME}.exe"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "DisplayVersion"  "${VERSION}"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "URLInfoAbout"    "${PRODUCT_WEB_SITE}"
+  WriteRegStr ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "Publisher"       "${COMPANY_NAME}"
 
-  ; Hitung ukuran instalasi
   ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
   IntFmt $0 "0x%08X" $0
   WriteRegDWORD ${PRODUCT_UNINST_ROOT_KEY} "${PRODUCT_UNINST_KEY}" "EstimatedSize" "$0"
@@ -108,7 +96,6 @@ Section "FFmpeg" SEC02
   SetOutPath "$INSTDIR\ffmpeg"
   File /r "..\ffmpeg\*.*"
 
-  ; Tambahkan ffmpeg ke PATH sistem
   WriteRegExpandStr HKLM \
     "SYSTEM\CurrentControlSet\Control\Session Manager\Environment" \
     "Path" \
@@ -116,20 +103,17 @@ Section "FFmpeg" SEC02
   SendMessage ${HWND_BROADCAST} ${WM_WININICHANGE} 0 "STR:Environment" /TIMEOUT=5000
 SectionEnd
 
-Section "Python Runtime" SEC03
+Section "Python Backend" SEC03
   ; Python sudah di-bundle via PyInstaller menjadi gemini_load_balancer.exe
-  ; Tidak perlu install Python terpisah — cukup copy .exe dari backend/
   SetOutPath "$INSTDIR\backend"
   File /r "..\backend\*.*"
 SectionEnd
 
-; FIXED: Hapus "SectionIn RO" — CUDA adalah fitur opsional, user harus bisa pilih
 Section /o "CUDA Support (Optional)" SEC04
   SetOutPath "$INSTDIR\cuda"
   File /r "..\cuda\*.*"
 SectionEnd
 
-; Tampilkan deskripsi tiap section di installer
 !insertmacro MUI_FUNCTION_DESCRIPTION_BEGIN
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC01} $(DESC_SEC01)
   !insertmacro MUI_DESCRIPTION_TEXT ${SEC02} $(DESC_SEC02)
@@ -138,14 +122,13 @@ SectionEnd
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 
 ;--------------------------------
-; Uninstaller Section
+; Uninstaller
 
 Section "Uninstall"
   Delete "$INSTDIR\uninst.exe"
-  Delete "$DESKTOP\DramaTool.lnk"
-  Delete "$SMPROGRAMS\DramaTool\DramaTool.lnk"
-  RMDir  "$SMPROGRAMS\DramaTool"
-
+  Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
+  Delete "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk"
+  RMDir  "$SMPROGRAMS\${PRODUCT_NAME}"
   RMDir /r "$INSTDIR"
 
   MessageBox MB_YESNO "Hapus folder data pengguna juga? (Documents\DramaTool)" IDNO NoDeleteData
@@ -162,7 +145,6 @@ SectionEnd
 ; Functions
 
 Function .onInit
-  ; Cek apakah sudah terinstall
   ReadRegStr $R0 HKLM "${PRODUCT_DIR_REGKEY}" ""
   ${If} $R0 != ""
     MessageBox MB_OKCANCEL|MB_ICONEXCLAMATION \

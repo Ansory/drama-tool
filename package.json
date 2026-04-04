@@ -4,12 +4,24 @@
   "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "scripts": {
+    "dev": "concurrently \"vite\" \"electron .\"",
+    "build": "vite build",
+    "build:win": "npm run build && electron-builder --win --x64",
     "start": "electron .",
-    "build:win": "electron-builder --win --x64"
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "electron-store": "^10.0.0",
+    "schedule": "^1.0.0"
   },
   "devDependencies": {
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4"
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.0.0",
+    "concurrently": "^9.0.0"
   },
   "build": {
     "appId": "com.dramatool.app",
@@ -17,8 +29,30 @@
     "directories": {
       "output": "dist"
     },
+    "files": [
+      "dist/**/*",
+      "src/main/**/*",
+      "preload.js",
+      "autoUpdater.js"
+    ],
+    "extraResources": [
+      {
+        "from": "assets/",
+        "to": "assets/"
+      }
+    ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "assets/installer.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Ansory",
+      "repo": "drama-tool"
     }
   }
 }

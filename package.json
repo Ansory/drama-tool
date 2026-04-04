@@ -30,7 +30,7 @@
       "output": "dist"
     },
     "files": [
-      "dist/**/*",
+      "dist/renderer/**/*",
       "src/main/**/*",
       "preload.js",
       "autoUpdater.js"

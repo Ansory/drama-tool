@@ -3,8 +3,8 @@ name: Build & Release DramaTool
 on:
   push:
     tags:
-      - 'v*.*.*'          # Otomatis trigger saat push tag: v1.0.0, v1.2.3-beta, dll
-  workflow_dispatch:       # Bisa dijalankan manual dari tab Actions
+      - 'v*.*.*'
+  workflow_dispatch:
     inputs:
       draft:
         description: 'Buat sebagai draft release?'
@@ -22,20 +22,17 @@ on:
           - dev
 
 permissions:
-  contents: write          # Wajib untuk membuat GitHub Release & upload asset
+  contents: write
 
 env:
   NODE_VERSION: '20'
   PYTHON_VERSION: '3.11'
 
-# ═══════════════════════════════════════════════════════════════════════════════
 jobs:
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 1: Validasi — cek semua prasyarat sebelum build dimulai
-  # ─────────────────────────────────────────────────────────────────────────────
+  # ── JOB 1: Validasi ──────────────────────────────────────────────────────────
   validate:
-    name: ✅ Validasi Prasyarat
+    name: "\u2705 Validasi Prasyarat"
     runs-on: ubuntu-latest
 
     steps:
@@ -47,7 +44,6 @@ jobs:
           echo "Mengecek file kode wajib..."
           MISSING=()
 
-          # Cek file kode — ini harus ada, tidak bisa di-generate otomatis
           for f in \
             "package.json" \
             "preload.js" \
@@ -56,34 +52,28 @@ jobs:
             "DramaTool.nsi" \
             "src/main/main.js"; do
             if [ ! -f "$f" ]; then
-              MISSING+=("❌ $f")
+              MISSING+=("TIDAK ADA: $f")
             else
-              echo "✅ $f"
+              echo "OK: $f"
             fi
           done
 
           if [ ${#MISSING[@]} -gt 0 ]; then
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "File kode berikut TIDAK DITEMUKAN:"
             printf '%s\n' "${MISSING[@]}"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             exit 1
           fi
 
-          # Cek assets installer — tampilkan warning saja, akan di-generate otomatis
-          echo ""
           echo "Mengecek assets installer..."
           for f in "assets/installer.ico" "assets/banner.bmp" "assets/LICENSE.txt"; do
             if [ ! -f "$f" ]; then
-              echo "⚠️  $f tidak ada — akan dibuat placeholder otomatis saat build"
+              echo "WARNING: $f tidak ada - akan dibuat placeholder otomatis"
             else
-              echo "✅ $f"
+              echo "OK: $f"
             fi
           done
 
-          echo ""
-          echo "✅ Validasi selesai."
+          echo "Validasi selesai."
 
       - name: Validasi package.json
         run: |
@@ -99,14 +89,12 @@ jobs:
               console.error('package.json tidak punya script build');
               process.exit(1);
             }
-            console.log('✅ package.json valid, versi:', pkg.version);
+            console.log('package.json valid, versi:', pkg.version);
           "
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 2: Build Python backend (gemini_load_balancer → .exe)
-  # ─────────────────────────────────────────────────────────────────────────────
+  # ── JOB 2: Build Python Backend ──────────────────────────────────────────────
   build-python:
-    name: 🐍 Build Python Backend
+    name: "Build Python Backend"
     runs-on: windows-latest
     needs: validate
 
@@ -126,9 +114,6 @@ jobs:
           pip install pyinstaller schedule requests
           if (Test-Path "backend/requirements.txt") {
             pip install -r backend/requirements.txt
-            Write-Host "✅ requirements.txt diinstall"
-          } else {
-            Write-Host "⚠️  backend/requirements.txt tidak ada, dilewati"
           }
 
       - name: Build gemini_load_balancer.py ke .exe
@@ -138,16 +123,15 @@ jobs:
             --name gemini_load_balancer `
             --clean `
             gemini_load_balancer.py
-          Write-Host "✅ Build Python selesai"
 
       - name: Verifikasi hasil build Python
         run: |
           if (-not (Test-Path "dist/gemini_load_balancer.exe")) {
-            Write-Error "❌ gemini_load_balancer.exe tidak ditemukan"
+            Write-Error "gemini_load_balancer.exe tidak ditemukan"
             exit 1
           }
           $size = (Get-Item "dist/gemini_load_balancer.exe").Length / 1MB
-          Write-Host "✅ gemini_load_balancer.exe ($([math]::Round($size, 1)) MB)"
+          Write-Host "OK: gemini_load_balancer.exe ($([math]::Round($size, 1)) MB)"
 
       - name: Upload artifact Python backend
         uses: actions/upload-artifact@v4
@@ -156,18 +140,16 @@ jobs:
           path: dist/gemini_load_balancer.exe
           retention-days: 1
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 3: Build Electron app + NSIS installer
-  # ─────────────────────────────────────────────────────────────────────────────
+  # ── JOB 3: Build Electron + NSIS ─────────────────────────────────────────────
   build-electron:
-    name: ⚡ Build Electron + NSIS Installer
+    name: "Build Electron + NSIS Installer"
     runs-on: windows-latest
     needs: build-python
 
     outputs:
       installer_name: ${{ steps.find-installer.outputs.INSTALLER_NAME }}
       installer_path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
-      app_version:    ${{ steps.get-version.outputs.VERSION }}
+      app_version: ${{ steps.get-version.outputs.VERSION }}
 
     steps:
       - name: Checkout kode
@@ -182,7 +164,7 @@ jobs:
       - name: Install dependensi Node
         run: npm ci
 
-      - name: Download Python backend dari job sebelumnya
+      - name: Download Python backend
         uses: actions/download-artifact@v4
         with:
           name: python-backend
@@ -192,11 +174,11 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Test-Path "backend/gemini_load_balancer.exe")) {
-            Write-Error "❌ backend/gemini_load_balancer.exe tidak ditemukan"
+            Write-Error "backend/gemini_load_balancer.exe tidak ditemukan"
             exit 1
           }
           $size = (Get-Item "backend/gemini_load_balancer.exe").Length / 1MB
-          Write-Host "✅ backend/gemini_load_balancer.exe ($([math]::Round($size,1)) MB) siap"
+          Write-Host "OK: backend/gemini_load_balancer.exe ($([math]::Round($size,1)) MB)"
 
       - name: Ambil versi dari package.json
         id: get-version
@@ -205,97 +187,71 @@ jobs:
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
           Write-Host "Versi: $version"
 
-      # Buat folder assets dan generate file placeholder jika belum ada di repo.
-      # File asli (branding kamu) seharusnya di-commit ke repo agar hasil build
-      # punya tampilan yang benar. Placeholder ini hanya fallback agar CI tidak gagal.
-      - name: Generate placeholder assets installer (jika belum ada)
+      - name: Generate placeholder assets (jika belum ada di repo)
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path assets | Out-Null
 
-          # ── installer.ico ──────────────────────────────────────────────────
           if (-not (Test-Path "assets/installer.ico")) {
-            Write-Host "⚠️  assets/installer.ico tidak ada, membuat placeholder..."
-            # Buat PNG 256x256 warna biru dengan teks "DT" via ImageMagick (sudah ada di runner)
-            magick convert `
-              -size 256x256 xc:"#1a73e8" `
-              -fill white -font Arial -pointsize 96 `
-              -gravity center -annotate 0 "DT" `
-              assets/temp_icon.png
-
-            # Konversi ke ICO (multi-size)
-            magick convert assets/temp_icon.png `
-              -define icon:auto-resize="256,128,64,48,32,16" `
-              assets/installer.ico
-
+            Write-Host "Membuat placeholder installer.ico..."
+            magick convert -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp_icon.png
+            magick convert assets/temp_icon.png -define icon:auto-resize="256,128,64,48,32,16" assets/installer.ico
             Remove-Item assets/temp_icon.png -ErrorAction SilentlyContinue
-            Write-Host "✅ Placeholder installer.ico dibuat"
+            Write-Host "OK: installer.ico dibuat"
           } else {
-            Write-Host "✅ assets/installer.ico sudah ada"
+            Write-Host "OK: assets/installer.ico sudah ada"
           }
 
-          # ── banner.bmp ─────────────────────────────────────────────────────
           if (-not (Test-Path "assets/banner.bmp")) {
-            Write-Host "⚠️  assets/banner.bmp tidak ada, membuat placeholder..."
-            # NSIS MUI banner: 164x314 px
-            magick convert `
-              -size 164x314 `
-              gradient:"#1a73e8-#0d47a1" `
-              -fill white -font Arial -pointsize 18 `
-              -gravity center -annotate 0 "DramaTool" `
-              assets/banner.bmp
-            Write-Host "✅ Placeholder banner.bmp dibuat (164x314)"
+            Write-Host "Membuat placeholder banner.bmp..."
+            magick convert -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
+            Write-Host "OK: banner.bmp dibuat (164x314px)"
           } else {
-            Write-Host "✅ assets/banner.bmp sudah ada"
+            Write-Host "OK: assets/banner.bmp sudah ada"
           }
 
-          # ── LICENSE.txt ────────────────────────────────────────────────────
           if (-not (Test-Path "assets/LICENSE.txt")) {
-            Write-Host "⚠️  assets/LICENSE.txt tidak ada, membuat placeholder..."
-            @"
-MIT License
-
-Copyright (c) 2026 DramaTool Team
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-"@ | Out-File -FilePath assets/LICENSE.txt -Encoding utf8
-            Write-Host "✅ Placeholder LICENSE.txt dibuat"
+            Write-Host "Membuat placeholder LICENSE.txt..."
+            $license = @(
+              "MIT License",
+              "",
+              "Copyright (c) 2026 DramaTool Team",
+              "",
+              "Permission is hereby granted, free of charge, to any person obtaining a copy",
+              "of this software and associated documentation files (the Software), to deal",
+              "in the Software without restriction, including without limitation the rights",
+              "to use, copy, modify, merge, publish, distribute, sublicense, and/or sell",
+              "copies of the Software, and to permit persons to whom the Software is",
+              "furnished to do so, subject to the following conditions:",
+              "",
+              "The above copyright notice and this permission notice shall be included in all",
+              "copies or substantial portions of the Software.",
+              "",
+              "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR",
+              "IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,",
+              "FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT."
+            )
+            $license | Set-Content -Path assets/LICENSE.txt -Encoding utf8
+            Write-Host "OK: LICENSE.txt dibuat"
           } else {
-            Write-Host "✅ assets/LICENSE.txt sudah ada"
+            Write-Host "OK: assets/LICENSE.txt sudah ada"
           }
 
       - name: Build React / frontend (Vite)
-        run: |
-          npm run build
-          Write-Host "✅ Vite build selesai"
+        run: npm run build
 
       - name: Build Electron installer Windows (NSIS)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Untuk code signing (opsional):
-          # CSC_LINK:         ${{ secrets.CSC_LINK }}
+          # Code signing (opsional - uncomment jika punya sertifikat):
+          # CSC_LINK: ${{ secrets.CSC_LINK }}
           # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-        run: |
-          npm run build:win
-          Write-Host "✅ Electron NSIS build selesai"
+        run: npm run build:win
 
       - name: Cari file installer hasil build
         id: find-installer
         shell: pwsh
         run: |
-          # Cari *Setup*.exe di dist, abaikan win-unpacked
           $installer = Get-ChildItem -Path dist -Filter "*Setup*.exe" -Recurse |
             Where-Object { $_.FullName -notlike "*win-unpacked*" } |
             Select-Object -First 1
@@ -307,14 +263,14 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
           }
 
           if (-not $installer) {
-            Write-Error "❌ Tidak ada installer .exe ditemukan di dist/"
+            Write-Error "Tidak ada installer .exe ditemukan di dist/"
             Get-ChildItem -Path dist -Recurse | Select-Object FullName
             exit 1
           }
 
           echo "INSTALLER_PATH=$($installer.FullName)" >> $env:GITHUB_OUTPUT
-          echo "INSTALLER_NAME=$($installer.Name)"     >> $env:GITHUB_OUTPUT
-          Write-Host "✅ Installer: $($installer.Name) ($([math]::Round($installer.Length/1MB,1)) MB)"
+          echo "INSTALLER_NAME=$($installer.Name)" >> $env:GITHUB_OUTPUT
+          Write-Host "OK: $($installer.Name) ($([math]::Round($installer.Length/1MB,1)) MB)"
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
@@ -323,8 +279,6 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
           path: ${{ steps.find-installer.outputs.INSTALLER_PATH }}
           retention-days: 7
 
-      # latest.yml dihasilkan electron-builder, dipakai oleh electron-updater
-      # untuk mendeteksi versi terbaru (sesuai arsitektur auto-update di repo)
       - name: Upload latest.yml artifact
         uses: actions/upload-artifact@v4
         with:
@@ -333,11 +287,9 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
           retention-days: 7
         continue-on-error: true
 
-  # ─────────────────────────────────────────────────────────────────────────────
-  # JOB 4: Publish GitHub Release
-  # ─────────────────────────────────────────────────────────────────────────────
+  # ── JOB 4: Publish GitHub Release ────────────────────────────────────────────
   release:
-    name: 🚀 Publish GitHub Release
+    name: "Publish GitHub Release"
     runs-on: ubuntu-latest
     needs: build-electron
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
@@ -352,7 +304,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
           name: windows-installer
           path: release/
 
-      - name: Download update manifest (latest.yml)
+      - name: Download update manifest
         uses: actions/download-artifact@v4
         with:
           name: update-manifest
@@ -382,17 +334,15 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
             DRAFT="false"
           fi
 
-          echo "VERSION=$VERSION"       >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "PRERELEASE=$PRERELEASE" >> $GITHUB_OUTPUT
-          echo "DRAFT=$DRAFT"           >> $GITHUB_OUTPUT
-          echo "CHANNEL=$CHANNEL"       >> $GITHUB_OUTPUT
+          echo "DRAFT=$DRAFT" >> $GITHUB_OUTPUT
+          echo "CHANNEL=$CHANNEL" >> $GITHUB_OUTPUT
 
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "Versi   : $VERSION"
           echo "Channel : $CHANNEL"
           echo "Pre-rel : $PRERELEASE"
           echo "Draft   : $DRAFT"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
       - name: Lihat isi folder release
         run: ls -lh release/
@@ -400,29 +350,26 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
       - name: Buat GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name:               ${{ steps.release-info.outputs.VERSION }}
-          name:                   "DramaTool ${{ steps.release-info.outputs.VERSION }}"
-          draft:                  ${{ steps.release-info.outputs.DRAFT }}
-          prerelease:             ${{ steps.release-info.outputs.PRERELEASE }}
+          tag_name: ${{ steps.release-info.outputs.VERSION }}
+          name: "DramaTool ${{ steps.release-info.outputs.VERSION }}"
+          draft: ${{ steps.release-info.outputs.DRAFT }}
+          prerelease: ${{ steps.release-info.outputs.PRERELEASE }}
           generate_release_notes: true
           body: |
             ## DramaTool ${{ steps.release-info.outputs.VERSION }}
 
             **Channel:** `${{ steps.release-info.outputs.CHANNEL }}`
 
-            ### 📥 Cara Install
+            ### Cara Install
             1. Download file `DramaTool-Setup-*.exe` di bawah
             2. Jalankan installer sebagai Administrator
             3. Ikuti petunjuk instalasi
 
-            ### 🔄 Update Otomatis
+            ### Update Otomatis
             Jika sudah install versi sebelumnya, aplikasi akan mendeteksi update ini otomatis saat startup atau setiap 6 jam sekali.
 
-            ### 🐍 Gemini Load Balancer
+            ### Gemini Load Balancer
             Backend Python sudah ter-bundle di dalam installer. Tidak perlu install Python terpisah.
-
-            ---
-            > Lihat perubahan lengkap di bagian **Changes** di bawah.
           files: |
             release/*.exe
             release/latest.yml

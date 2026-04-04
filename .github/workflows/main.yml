@@ -1,24 +1,31 @@
-{
-  "name": "drama-tool",
-  "version": "1.0.0",
-  "description": "Video Generator + Planner Konten Drama China",
-  "main": "src/main/main.js",
-  "scripts": {
-    "start": "electron .",
-    "build:win": "electron-builder --win --x64"
-  },
-  "devDependencies": {
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4"
-  },
-  "build": {
-    "appId": "com.dramatool.app",
-    "productName": "Drama Tool",
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": "nsis"
-    }
-  }
-}
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Build Electron App
+      run: npm run build:win
+
+    - name: Upload Installer
+      uses: actions/upload-artifact@v4
+      with:
+        name: DramaTool-Setup
+        path: dist/*.exe

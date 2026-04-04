@@ -19,6 +19,11 @@ import TeamCollab from './components/TeamCollab';
 import ExportShare from './components/ExportShare';
 import AssetManager from './components/AssetManager';
 import AudienceAnalytics from './components/AudienceAnalytics';
+import AutoReplyComment from './components/AutoReplyComment';
+import LinkComment from './components/LinkComment';
+import SocialListening from './components/SocialListening';
+import AffiliateIntegration from './components/AffiliateIntegration';
+import ProfitTracker from './components/ProfitTracker';
 import './App.css';
 
 function App() {
@@ -49,6 +54,13 @@ function App() {
 { id: 'export', name: '📤 Export & Share', category: 'Management', component: ExportShare },
 { id: 'asset', name: '🗂️ Asset Manager', category: 'Management', component: AssetManager },
 { id: 'audience', name: '📊 Audience Analytics', category: 'Management', component: AudienceAnalytics },
+    // Social Engagement (Modul 26-28)
+{ id: 'autoreply', name: '💬 Auto Reply Comment', category: 'Social', component: AutoReplyComment },
+{ id: 'linkcomment', name: '🔗 Link Comment', category: 'Social', component: LinkComment },
+{ id: 'sociallistening', name: '👂 Social Listening', category: 'Social', component: SocialListening },
+// Monetisasi (Modul 29-30)
+{ id: 'affiliate', name: '🛍️ Affiliate Integration', category: 'Monetization', component: AffiliateIntegration },
+{ id: 'profit', name: '💰 Profit Tracker', category: 'Monetization', component: ProfitTracker },
     ];
 
     const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component || VideoEditor;
@@ -100,5 +112,14 @@ const managementTabs = tabs.filter(t => t.category === 'Management');
 </div>
     );
 }
+    
+    <div className="nav-category">
+    <div className="category-title">💬 SOCIAL ENGAGEMENT</div>
+    {socialTabs.map(tab => (...))}
+</div>
+<div className="nav-category">
+    <div className="category-title">💰 MONETISASI</div>
+    {monetizationTabs.map(tab => (...))}
+</div>
 
 export default App;

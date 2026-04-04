@@ -1,25 +1,53 @@
 {
   "name": "drama-tool",
   "version": "1.0.0",
-  "description": "Video Generator + Planner Konten Drama China",
+  "description": "Video Generator + Planner Konten Drama China - Aplikasi desktop untuk content creator drama China dengan AI, auto caption, prediksi FYP, dan auto upload ke Facebook",
   "main": "src/main/main.js",
+  "author": {
+    "name": "Ansory",
+    "email": "support@dramatool.com",
+    "url": "https://github.com/Ansory"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Ansory/drama-tool.git"
+  },
+  "homepage": "https://github.com/Ansory/drama-tool#readme",
+  "bugs": {
+    "url": "https://github.com/Ansory/drama-tool/issues"
+  },
+  "keywords": [
+    "drama-china",
+    "video-editor",
+    "ai-content-generator",
+    "facebook-reels",
+    "electron-app",
+    "video-processing",
+    "fyp-predictor",
+    "auto-caption",
+    "watermark-remover"
+  ],
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron .",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "cross-env NODE_ENV=development electron .",
     "build:win": "electron-builder --win --x64",
-    "build:portable": "electron-builder --win portable",
-    "postinstall": "electron-builder install-app-deps"
-  },
-  "author": "Ansory",
-  "license": "MIT",
-  "devDependencies": {
-    "cross-env": "^7.0.3",
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4"
+    "build:win:portable": "electron-builder --win portable",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps",
+    "clean": "rm -rf dist node_modules",
+    "lint": "eslint src/**/*.{js,jsx}",
+    "format": "prettier --write 'src/**/*.{js,jsx,css}'"
   },
   "dependencies": {
     "axios": "^1.6.0",
+    "electron-log": "^5.0.1",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
     "react": "^18.2.0",
@@ -27,25 +55,108 @@
     "react-dropzone": "^14.2.3",
     "sqlite3": "^5.1.6"
   },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "eslint": "^8.55.0",
+    "eslint-plugin-react": "^7.33.2",
+    "prettier": "^3.1.0",
+    "vite": "^4.5.0"
+  },
   "build": {
     "appId": "com.dramatool.app",
     "productName": "Drama Tool",
+    "description": "Video Generator + Planner Konten Drama China",
+    "copyright": "Copyright © 2026 Ansory",
     "directories": {
-      "output": "dist"
+      "output": "dist",
+      "buildResources": "assets"
     },
     "files": [
       "src/**/*",
-      "node_modules/**/*"
+      "assets/**/*",
+      "backend/**/*",
+      "node_modules/**/*",
+      "!**/*.map",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/__tests__/**"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/ffmpeg-static/**",
+      "**/backend/**/*.py",
+      "**/backend/models/**"
     ],
     "win": {
-      "target": "nsis",
-      "icon": "assets/icon.ico"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "assets/icon.ico",
+      "publisherName": "Drama Tool",
+      "legalTrademarks": "Drama Tool",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
-  }
+      "createStartMenuShortcut": true,
+      "shortcutName": "Drama Tool",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "license": "assets/LICENSE.txt",
+      "headerImage": "assets/banner.bmp",
+      "deleteAppDataOnUninstall": false,
+      "runAfterFinish": true,
+      "perMachine": true,
+      "displayLanguageSelector": true,
+      "language": "1045",
+      "installerLanguages": ["en_US", "id_ID"]
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.video"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "icon": "assets/icon.png",
+      "category": "Video"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Ansory",
+      "repo": "drama-tool",
+      "private": false,
+      "releaseType": "release"
+    },
+    "extraResources": [
+      {
+        "from": "backend/",
+        "to": "backend/",
+        "filter": ["**/*"]
+      }
+    ]
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "os": [
+    "win32",
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
 }

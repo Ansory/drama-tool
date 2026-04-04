@@ -24,6 +24,17 @@ import LinkComment from './components/LinkComment';
 import SocialListening from './components/SocialListening';
 import AffiliateIntegration from './components/AffiliateIntegration';
 import ProfitTracker from './components/ProfitTracker';
+import LoadBalancer from './components/LoadBalancer';
+import FacebookIntegration from './components/FacebookIntegration';
+import AutoUpdate from './components/AutoUpdate';
+import ContentRepurposing from './components/ContentRepurposing';
+import BurnoutProtection from './components/BurnoutProtection';
+import EditingTemplate from './components/EditingTemplate';
+import CompetitorAnalysis from './components/CompetitorAnalysis';
+import RoyaltyFree from './components/RoyaltyFree';
+import GrowthTracker from './components/GrowthTracker';
+import ImportFromSocial from './components/ImportFromSocial';
+import NotificationSystem from './components/NotificationSystem';
 import './App.css';
 
 function App() {
@@ -61,6 +72,20 @@ function App() {
 // Monetisasi (Modul 29-30)
 { id: 'affiliate', name: '🛍️ Affiliate Integration', category: 'Monetization', component: AffiliateIntegration },
 { id: 'profit', name: '💰 Profit Tracker', category: 'Monetization', component: ProfitTracker },
+    // Infrastruktur (Modul 31-33)
+{ id: 'loadbalancer', name: '🔑 Load Balancer', category: 'Infrastructure', component: LoadBalancer },
+{ id: 'facebook', name: '📘 Facebook Integration', category: 'Infrastructure', component: FacebookIntegration },
+{ id: 'autoupdate', name: '🔄 Auto Update', category: 'Infrastructure', component: AutoUpdate },
+// Tools (Modul 35-37)
+{ id: 'repurpose', name: '🔄 Repurpose', category: 'Tools', component: ContentRepurposing },
+{ id: 'burnout', name: '🧘 Burnout Protection', category: 'Tools', component: BurnoutProtection },
+{ id: 'template', name: '🎨 Editing Template', category: 'Tools', component: EditingTemplate },
+// Bonus (Modul 38-42)
+{ id: 'competitor', name: '🔍 Competitor Analysis', category: 'Bonus', component: CompetitorAnalysis },
+{ id: 'royalty', name: '📚 Royalty Free', category: 'Bonus', component: RoyaltyFree },
+{ id: 'growth', name: '📈 Growth Tracker', category: 'Bonus', component: GrowthTracker },
+{ id: 'import', name: '📥 Import Social', category: 'Bonus', component: ImportFromSocial },
+{ id: 'notify', name: '🔔 Notification', category: 'Bonus', component: NotificationSystem },
     ];
 
     const ActiveComponent = tabs.find(tab => tab.id === activeTab)?.component || VideoEditor;
@@ -70,6 +95,9 @@ function App() {
     const planningTabs = tabs.filter(t => t.category === 'Planning');
     const securityTabs = tabs.filter(t => t.category === 'Security');
 const managementTabs = tabs.filter(t => t.category === 'Management');
+    const infraTabs = tabs.filter(t => t.category === 'Infrastructure');
+const toolsTabs = tabs.filter(t => t.category === 'Tools');
+const bonusTabs = tabs.filter(t => t.category === 'Bonus');
 
     return (
         <div className="app">
@@ -122,4 +150,17 @@ const managementTabs = tabs.filter(t => t.category === 'Management');
     {monetizationTabs.map(tab => (...))}
 </div>
 
+<div className="nav-category">
+    <div className="category-title">🔧 INFRASTRUKTUR</div>
+    {infraTabs.map(tab => (...))}
+</div>
+<div className="nav-category">
+    <div className="category-title">🛠️ TOOLS</div>
+    {toolsTabs.map(tab => (...))}
+</div>
+<div className="nav-category">
+    <div className="category-title">🎁 BONUS</div>
+    {bonusTabs.map(tab => (...))}
+</div>
+    
 export default App;

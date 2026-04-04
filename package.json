@@ -30,42 +30,42 @@
   ],
   "scripts": {
     "start": "electron .",
-    "dev": "cross-env NODE_ENV=development electron .",
-    "build": "vite build",
-    "preview": "vite preview",
-    "electron:dev": "cross-env NODE_ENV=development electron .",
-    "build:win": "electron-builder --win --x64",
-    "build:win:portable": "electron-builder --win portable",
-    "build:mac": "electron-builder --mac",
-    "build:linux": "electron-builder --linux",
-    "postinstall": "electron-builder install-app-deps",
-    "clean": "rm -rf dist node_modules",
+    "dev": "cross-env NODE_ENV=development concurrently \"vite --config vite.config.mjs\" \"electron .\"",
+    "build": "vite build --config vite.config.mjs",
+    "preview": "vite preview --config vite.config.mjs",
+    "build:win": "npm run build && electron-builder --win --x64",
+    "build:win:portable": "npm run build && electron-builder --win portable",
+    "build:mac": "npm run build && electron-builder --mac",
+    "build:linux": "npm run build && electron-builder --linux",
+    "clean": "rimraf dist",
     "lint": "eslint src/**/*.{js,jsx}",
-    "format": "prettier --write 'src/**/*.{js,jsx,css}'"
+    "format": "prettier --write \"src/**/*.{js,jsx,css}\""
   },
   "dependencies": {
     "axios": "^1.6.0",
     "electron-log": "^5.0.1",
-    "electron-store": "^8.1.0",
-    "electron-updater": "^6.1.7",
+    "electron-store": "^8.2.0",
+    "electron-updater": "^6.3.9",
     "ffmpeg-static": "^5.2.0",
     "fluent-ffmpeg": "^2.1.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-dropzone": "^14.2.3",
     "sqlite3": "^5.1.6"
   },
   "devDependencies": {
-    "@types/react": "^18.2.0",
-    "@types/react-dom": "^18.2.0",
-    "@vitejs/plugin-react": "^4.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.0.0",
     "cross-env": "^7.0.3",
-    "electron": "^27.0.0",
-    "electron-builder": "^24.6.4",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "prettier": "^3.1.0",
-    "vite": "^4.5.0"
+    "rimraf": "^5.0.0",
+    "vite": "^6.0.0"
   },
   "build": {
     "appId": "com.dramatool.app",
@@ -77,10 +77,9 @@
       "buildResources": "assets"
     },
     "files": [
-      "src/**/*",
+      "dist/renderer/**/*",
+      "src/main/**/*",
       "assets/**/*",
-      "backend/**/*",
-      "node_modules/**/*",
       "!**/*.map",
       "!**/test/**",
       "!**/tests/**",
@@ -88,9 +87,7 @@
     ],
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/ffmpeg-static/**",
-      "**/backend/**/*.py",
-      "**/backend/models/**"
+      "**/node_modules/ffmpeg-static/**"
     ],
     "win": {
       "target": [
@@ -113,13 +110,10 @@
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "license": "assets/LICENSE.txt",
-      "headerImage": "assets/banner.bmp",
       "deleteAppDataOnUninstall": false,
       "runAfterFinish": true,
-      "perMachine": true,
-      "displayLanguageSelector": true,
-      "language": "1045",
-      "installerLanguages": ["en_US", "id_ID"]
+      "perMachine": false,
+      "multiLanguageInstaller": true
     },
     "mac": {
       "target": ["dmg", "zip"],

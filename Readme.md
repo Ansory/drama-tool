@@ -1,77 +1,55 @@
-# Drama Tool — Panduan Setup & Build
+# 🎬 DRAMA TOOL
 
-## Prasyarat
+**Video Generator + Planner Konten Drama China**
 
-Pastikan semua tools berikut sudah terinstall:
-- Node.js >= 18
-- Python >= 3.10
-- NSIS (untuk build installer Windows)
-- FFmpeg (opsional, bisa di-bundel)
+Drama Tool adalah aplikasi desktop untuk content creator drama China yang ingin membuat konten viral di Facebook Reels. Dilengkapi dengan AI untuk auto generate caption, prediksi FYP, penghapus subtitle/watermark, auto reply komentar, dan masih banyak lagi.
 
-## Instalasi
+---
+
+## 📋 Daftar Fitur (42 Modul)
+
+| Kategori | Modul |
+|----------|-------|
+| 🎬 Core Video Editing | Video Generator, Watermark + Inpainting, Penghilang Subtitle, Thumbnail Generator, Auto Pecah Video Panjang |
+| 📈 Planning & Optimasi | Planning Konten, Prediksi FYP, Audio & Musik, Hashtag Analytics, Viral Content Alert, A/B Testing, Engagement Predictor |
+| 🤖 AI Auto Generate | Auto Judul & Caption, Auto Hashtag, Script Generator |
+| 🛡️ Hak Cipta | Pre-upload Checker, Rights Manager, Anti-Copyright Strike, Infringement Response, Backup & Restore |
+| 🤝 Manajemen | Scheduler, Team Collaboration, Export & Share, Manajemen Aset, Audience Analytics |
+| 💬 Social Engagement | Auto Balas Komentar AI, Auto Semat Link, Social Listening |
+| 💰 Monetisasi | Shopee/Affiliate Integration, Profit Tracker |
+| 🔧 Infrastruktur | Multi-Key Load Balancer, Facebook Integration, Auto-Update |
+| 🛠️ Tools | Content Repurposing, Burnout Protection, Editing Template |
+| 🎁 Bonus | Competitor Analysis, Royalty Free, Growth Tracker, Import Social, Notification System |
+
+---
+
+## 📸 Screenshot
+
+![Dashboard](screenshots/dashboard.png)
+*Tampilan utama Drama Tool dengan 40+ fitur*
+
+---
+
+## 🚀 Quick Start
+
+### Prasyarat
+
+| Software | Minimal Version | Keterangan |
+|----------|----------------|------------|
+| Node.js | v18.x | [Download](https://nodejs.org/) |
+| Python | 3.10 | [Download](https://python.org/) |
+| Git | Latest | [Download](https://git-scm.com/) |
+| NSIS | 3.x | Untuk build installer (opsional) |
+
+### Instalasi
 
 ```bash
+# Clone repository
+git clone https://github.com/Ansory/drama-tool.git
+cd drama-tool
+
+# Install Node.js dependencies
 npm install
+
+# Install Python dependencies
 pip install -r backend/requirements.txt
-```
-
-## Development
-
-```bash
-npm run dev
-```
-
-## Build untuk Windows
-
-```bash
-npm run build:win
-```
-
----
-
-## ⚠️ File Assets yang Wajib Ada Sebelum Build NSIS
-
-File-file berikut **harus ada** di folder `assets/` sebelum menjalankan build installer:
-
-| File | Keterangan |
-|------|-----------|
-| `assets/installer.ico` | Icon aplikasi (.ico, min 256x256) |
-| `assets/banner.bmp` | Banner installer (.bmp, 164x314 px) |
-| `assets/LICENSE.txt` | Teks lisensi yang ditampilkan di installer |
-
-Tanpa file-file ini, build NSIS akan **gagal**.
-
----
-
-## Struktur Folder
-
-```
-drama-tool/
-├── assets/              ← File installer (ico, bmp, LICENSE)
-├── src/
-│   └── main/
-│       └── main.js      ← Electron main process
-├── backend/             ← Python backend
-│   └── requirements.txt
-├── autoUpdater.js
-├── preload.js
-├── vite.config.js
-├── package.json
-└── DramaTool.nsi
-```
-
-## Menjalankan Gemini Load Balancer
-
-```bash
-# Tambah API key
-python gemini_load_balancer.py add YOUR_API_KEY nama_key
-
-# Lihat semua key aktif
-python gemini_load_balancer.py list
-
-# Cek statistik
-python gemini_load_balancer.py stats
-
-# Test koneksi
-python gemini_load_balancer.py test YOUR_API_KEY
-```

@@ -61,7 +61,7 @@ jobs:
           ffmpeg -version
 
       - name: Install NPM Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Install Python Dependencies
         run: |

@@ -13,11 +13,18 @@ const RightsManager = () => {
         loadData();
     }, []);
 
+    // FIX: getStore adalah async (IPC invoke), harus di-await
     const loadData = async () => {
-        // Load dari store
-        const store = window.electron.getStore('rights-manager');
-        setRegisteredVideos(store.registered || []);
-        setRules(store.rules || []);
+        try {
+            const store = await window.electron.getStore('rights-manager');
+            if (store) {
+                setRegisteredVideos(store.registered || []);
+                setRules(store.rules || []);
+                setWhitelist(store.whitelist || []);
+            }
+        } catch (err) {
+            // Store belum ada, biarkan state default (array kosong)
+        }
     };
 
     const registerVideo = async () => {
@@ -48,7 +55,10 @@ const RightsManager = () => {
         const pageId = prompt('Masukkan Page ID atau username yang diizinkan:');
         if (pageId) {
             const newWhitelist = [...whitelist, pageId];
-            await window.electron.rightsWhitelist({ pageId: 'YOUR_PAGE_ID', whitelistedIds: newWhitelist });
+            await window.electron.rightsWhitelist({
+                pageId: 'YOUR_PAGE_ID',
+                whitelistedIds: newWhitelist
+            });
             setWhitelist(newWhitelist);
             alert(`${pageId} ditambahkan ke whitelist`);
         }
@@ -57,7 +67,7 @@ const RightsManager = () => {
     return (
         <div className="rights-manager">
             <h2>⚖️ Facebook Rights Manager</h2>
-            
+
             <div className="rights-section">
                 <h3>📋 Video Terdaftar</h3>
                 {registeredVideos.length === 0 ? (
@@ -74,11 +84,14 @@ const RightsManager = () => {
                 )}
                 <button onClick={registerVideo}>+ Daftarkan Video Baru</button>
             </div>
-            
+
             <div className="rights-section">
                 <h3>⚙️ Copyright Rules</h3>
                 <div className="rule-form">
-                    <select value={newRule.action} onChange={(e) => setNewRule({...newRule, action: e.target.value})}>
+                    <select
+                        value={newRule.action}
+                        onChange={(e) => setNewRule({ ...newRule, action: e.target.value })}
+                    >
                         <option value="TRACK">Track Only (Pantau)</option>
                         <option value="MONETIZE">Monetize (Klaim pendapatan)</option>
                         <option value="BLOCK">Block (Blokir total)</option>
@@ -86,11 +99,18 @@ const RightsManager = () => {
                     </select>
                     <label>
                         Overlap Duration (detik):
-                        <input type="number" value={newRule.conditions.overlapDuration} onChange={(e) => setNewRule({...newRule, conditions: { overlapDuration: parseInt(e.target.value) }})} />
+                        <input
+                            type="number"
+                            value={newRule.conditions.overlapDuration}
+                            onChange={(e) => setNewRule({
+                                ...newRule,
+                                conditions: { overlapDuration: parseInt(e.target.value) }
+                            })}
+                        />
                     </label>
                     <button onClick={createRule}>Buat Rule</button>
                 </div>
-                
+
                 {rules.length > 0 && (
                     <div className="rules-list">
                         {rules.map((rule, i) => (
@@ -102,7 +122,7 @@ const RightsManager = () => {
                     </div>
                 )}
             </div>
-            
+
             <div className="rights-section">
                 <h3>🤝 Whitelist Management</h3>
                 <div className="whitelist-list">
@@ -112,10 +132,10 @@ const RightsManager = () => {
                 </div>
                 <button onClick={addToWhitelist}>+ Tambah ke Whitelist</button>
             </div>
-            
+
             <div className="info-box">
                 <h4>📖 Tentang Rights Manager</h4>
-                <p>Rights Manager adalah fitur Meta untuk melindungi konten Anda dari pencurian. Setelah video terdaftar, Meta akan otomatis mendeteksi jika ada yang mengupload ulang video Anda.</p>
+                <p>Rights Manager adalah fitur Meta untuk melindungi konten Anda dari pencurian.</p>
                 <ul>
                     <li><strong>TRACK:</strong> Hanya pantau, tidak ada tindakan</li>
                     <li><strong>MONETIZE:</strong> Klaim pendapatan iklan dari video pencuri</li>

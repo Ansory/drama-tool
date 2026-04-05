@@ -843,4 +843,26 @@ process.on('uncaughtException', (error) => {
     debugLog('UNCAUGHT:', error.message);
 });
 
+// --- Auto Content Generator (AI) ---
+ipcMain.handle('auto:generate-content', async (event, options) => {
+    const { videoPath, dramaName = '', sceneHint = 'auto', platform = 'facebook' } = options;
+ 
+    if (!videoPath) {
+        return { error: 'Path video tidak valid' };
+    }
+ 
+    try {
+        return await runPython('auto_content_generator.py', [
+            'generate',
+            videoPath,
+            dramaName,
+            sceneHint,
+            platform
+        ]);
+    } catch (err) {
+        debugLog('auto:generate-content error:', err.message);
+        return { error: err.message };
+    }
+});
+
 console.log('[INIT] Main process started');

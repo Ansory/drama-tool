@@ -21,17 +21,10 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-.update-notification.installing {
-  border-color: rgba(78, 205, 196, 0.4);
-}
-
-.update-notification.downloading {
-  border-color: rgba(255, 193, 7, 0.4);
-}
-
-.update-notification.available {
-  border-color: rgba(255, 107, 107, 0.4);
-}
+.update-notification.available  { border-color: rgba(255, 107, 107, 0.4); }
+.update-notification.downloading { border-color: rgba(255, 193, 7, 0.4); }
+.update-notification.downloaded  { border-color: rgba(78, 205, 196, 0.5); }
+.update-notification.installing  { border-color: rgba(78, 205, 196, 0.4); }
 
 .update-icon {
   font-size: 28px;
@@ -40,6 +33,7 @@
 
 .update-content {
   flex: 1;
+  min-width: 0;
 }
 
 .update-content h3 {
@@ -60,6 +54,7 @@
   color: #4ecdc4;
   cursor: pointer;
   margin-top: 6px;
+  user-select: none;
 }
 
 .release-notes {
@@ -69,38 +64,58 @@
   max-height: 120px;
   overflow-y: auto;
   white-space: pre-wrap;
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: 8px;
   padding: 8px;
 }
 
+/* Progress bar */
+.progress-bar {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  height: 6px;
+  margin: 8px 0 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ecdc4, #ff6b6b);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Action buttons */
 .update-actions {
   display: flex;
   gap: 8px;
   margin-top: 12px;
   flex-wrap: wrap;
+  align-items: center;
 }
 
 .update-actions .btn-primary {
-  padding: 6px 14px;
+  padding: 7px 16px;
   font-size: 13px;
-  background: #ff6b6b;
+  background: #1877f2;
   color: white;
   border: none;
   border-radius: 8px;
   cursor: pointer;
+  font-weight: 600;
   transition: background 0.2s;
   margin: 0;
+  white-space: nowrap;
 }
 
 .update-actions .btn-primary:hover {
-  background: #ff5252;
+  background: #0d65d9;
 }
 
 .update-actions .btn-secondary {
-  padding: 6px 14px;
+  padding: 7px 14px;
   font-size: 13px;
-  background: rgba(255,255,255,0.1);
+  background: rgba(255, 255, 255, 0.1);
   color: white;
   border: none;
   border-radius: 8px;
@@ -110,7 +125,7 @@
 }
 
 .update-actions .btn-secondary:hover {
-  background: rgba(255,255,255,0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .update-actions .btn-text {
@@ -126,20 +141,4 @@
 
 .update-actions .btn-text:hover {
   color: #ccc;
-}
-
-/* Progress bar untuk download */
-.progress-bar {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 4px;
-  height: 6px;
-  margin: 8px 0;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4ecdc4, #ff6b6b);
-  border-radius: 4px;
-  transition: width 0.3s ease;
 }

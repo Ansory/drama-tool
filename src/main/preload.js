@@ -154,19 +154,16 @@ contextBridge.exposeInMainWorld('electron', {
     facebookUploadVideo: (options) => ipcRenderer.invoke('facebook:upload-video', options),
     facebookGetInsights: (options) => ipcRenderer.invoke('facebook:get-insights', options),
 
-    // ============ MODUL 33: AUTO UPDATE - LENGKAP ============
+    // ============ MODUL 33: AUTO UPDATE ============
     getConfig: () => ipcRenderer.invoke('updater:get-config'),
     updateConfig: (config) => ipcRenderer.invoke('updater:update-config', config),
     getVersion: () => ipcRenderer.invoke('updater:get-version'),
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
-    
-    // Untuk UpdateNotification.jsx
     getSkippedVersions: () => ipcRenderer.invoke('updater:get-skipped-versions'),
     skipUpdate: (version) => ipcRenderer.invoke('updater:skip-update', version),
     downloadUpdate: () => ipcRenderer.invoke('updater:download-update'),
     installUpdate: () => ipcRenderer.invoke('updater:install-update'),
-    
-    // Event listeners untuk update
+
     onUpdateAvailable: (callback) => ipcRenderer.on('updater:update-available', (event, ...args) => callback(event, ...args)),
     onUpdateDownloadProgress: (callback) => ipcRenderer.on('updater:download-progress', (event, ...args) => callback(event, ...args)),
     onUpdateDownloaded: (callback) => ipcRenderer.on('updater:update-downloaded', (event, ...args) => callback(event, ...args)),
@@ -193,6 +190,7 @@ contextBridge.exposeInMainWorld('electron', {
     growthTrack: (pageId) => ipcRenderer.invoke('growth:track', pageId),
 
     // ============ MODUL 41: IMPORT FROM SOCIAL ============
+    // FIX: importDownload sekarang cukup kirim { url, platform }, outputPath ditentukan main.js
     importDownload: (options) => ipcRenderer.invoke('import:download', options),
     importRemoveWatermark: (options) => ipcRenderer.invoke('import:remove-watermark', options),
 
@@ -209,14 +207,17 @@ contextBridge.exposeInMainWorld('electron', {
     openExternal: (url) => ipcRenderer.invoke('open-external', url),
     shellShowItemInFolder: (path) => ipcRenderer.invoke('shell:show-item-in-folder', path),
 
+    // FIX: Tambah showOpenDialog untuk WatermarkInpainting.jsx
+    showOpenDialog: (options) => ipcRenderer.invoke('dialog:show-open', options),
+
     // ============ STORE HELPERS ============
     getStore: (key) => ipcRenderer.invoke('store:get', key),
     setStore: (key, value) => ipcRenderer.invoke('store:set', key, value),
 
-    // ============ EVENT LISTENERS GENERIC ============
+    // ============ EVENT LISTENERS ============
     on: (channel, callback) => {
         const validChannels = [
-            'update-status', 'updater:update-available', 'updater:download-progress', 
+            'update-status', 'updater:update-available', 'updater:download-progress',
             'updater:update-downloaded', 'updater:error',
             'viral-alert', 'copyright-strike', 'upload-complete'
         ];

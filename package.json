@@ -70,7 +70,6 @@
   "build": {
     "appId": "com.dramatool.app",
     "productName": "Drama Tool",
-    "description": "Video Generator + Planner Konten Drama China",
     "copyright": "Copyright © 2026 Ansory",
     "directories": {
       "output": "dist",

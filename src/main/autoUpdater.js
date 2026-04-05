@@ -18,6 +18,9 @@ class AppUpdater {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
 
+    // Bypass code signing — hapus setelah punya certificate berbayar
+    autoUpdater.verifyUpdateCodeSignature = () => Promise.resolve(undefined);
+
     this.setupEventHandlers();
   }
 

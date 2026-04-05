@@ -6,9 +6,8 @@ const Settings = () => {
         updateChannel: 'stable',
         checkInterval: 6
     });
-
-    // FIX: Simpan hanya string versi, bukan full object
     const [appVersion, setAppVersion] = useState('...');
+    const [buildDate, setBuildDate] = useState('...');
     const [toast, setToast] = useState(null);
 
     useEffect(() => {
@@ -31,9 +30,9 @@ const Settings = () => {
 
     const loadVersion = async () => {
         try {
-            const versionInfo = await window.electron.getVersion();
             // FIX: getVersion() return { current, latest, updateAvailable }
-            // Ambil hanya field 'current' untuk ditampilkan
+            // current diambil dari app.getVersion() di main process (sesuai package.json)
+            const versionInfo = await window.electron.getVersion();
             if (versionInfo && typeof versionInfo === 'object') {
                 setAppVersion(versionInfo.current || 'N/A');
             } else if (typeof versionInfo === 'string') {
@@ -41,8 +40,23 @@ const Settings = () => {
             } else {
                 setAppVersion('N/A');
             }
+
+            // FIX: Build date dinamis dari electron store, bukan hardcoded
+            const stored = await window.electron.getStore('build_date');
+            if (stored) {
+                setBuildDate(new Date(stored).toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                }));
+            } else {
+                const now = new Date();
+                await window.electron.setStore('build_date', now.toISOString());
+                setBuildDate(now.toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'long', year: 'numeric'
+                }));
+            }
         } catch {
             setAppVersion('N/A');
+            setBuildDate('N/A');
         }
     };
 
@@ -58,12 +72,15 @@ const Settings = () => {
     const handleCheckUpdate = async () => {
         try {
             showToast('Sedang memeriksa update...', 'info');
-            const result = await window.electron.checkForUpdates();
-            if (result && result.updateAvailable) {
-                showToast(`Update v${result.version} tersedia!`, 'success');
-            } else {
-                showToast('Aplikasi sudah versi terbaru ✓', 'info');
-            }
+            await window.electron.checkForUpdates();
+            // Hasil update muncul via UpdateNotification banner otomatis
+            // Jika tidak ada update, tunggu response lalu tampilkan pesan
+            setTimeout(async () => {
+                const versionInfo = await window.electron.getVersion();
+                if (!versionInfo?.updateAvailable) {
+                    showToast('Aplikasi sudah versi terbaru ✓', 'info');
+                }
+            }, 5000);
         } catch {
             showToast('Gagal memeriksa update', 'error');
         }
@@ -137,9 +154,8 @@ const Settings = () => {
             <div className="settings-section">
                 <h3>Informasi Versi</h3>
                 <div className="version-info">
-                    {/* FIX: Tampilkan appVersion (string), bukan full object */}
                     <p>Versi saat ini: <strong>v{appVersion}</strong></p>
-                    <p>Terakhir update: <strong>25 Maret 2026</strong></p>
+                    <p>Terakhir update: <strong>{buildDate}</strong></p>
                     <a
                         href="#"
                         onClick={(e) => {

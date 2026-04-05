@@ -30,6 +30,10 @@ jobs:
     name: Build Drama Tool for Windows
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
 
     steps:
       - name: Checkout Repository

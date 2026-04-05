@@ -572,15 +572,95 @@ ipcMain.handle('loadbalancer:stats', async () => {
 });
 
 // --- Facebook ---
-ipcMain.handle('facebook:login', async () => {
-    return { success: true, pages: store.get('fb_pages', []) };
+
+// Cek status login — verifikasi token ke API
+ipcMain.handle('facebook:check-login', async () => {
+    const token    = store.get('fb_user_token');
+    const loggedIn = store.get('fb_logged_in', false);
+    if (!token || !loggedIn) return { loggedIn: false };
+    try {
+        const axios = require('axios');
+        const res = await axios.get(
+            `https://graph.facebook.com/v19.0/me?fields=id,name&access_token=${token}`,
+            { timeout: 5000 }
+        );
+        return { loggedIn: true, user: res.data, pages: store.get('fb_pages', []) };
+    } catch {
+        // Token expired atau offline — clear
+        store.set('fb_logged_in', false);
+        store.delete('fb_user_token');
+        return { loggedIn: false };
+    }
 });
 
-ipcMain.handle('get-pages', async () => store.get('fb_pages', []));
+// Login dengan App ID per user (Pilihan A komersial)
+ipcMain.handle('facebook:login', async (event, appId) => {
+    if (!appId) return { success: false, error: 'App ID tidak boleh kosong' };
+    try {
+        const { openFacebookLoginWindow, getFacebookPages } = require('./facebookOAuth');
+        const token = await openFacebookLoginWindow(appId);
+        const pages = await getFacebookPages(token);
+        store.set('fb_user_token', token);
+        store.set('fb_pages', pages);
+        store.set('fb_logged_in', true);
+        return { success: true, pages };
+    } catch (err) {
+        debugLog('facebook:login error:', err.message);
+        return { success: false, error: err.message };
+    }
+});
+
+ipcMain.handle('get-pages', async () => {
+    const token = store.get('fb_user_token');
+    if (!token) return store.get('fb_pages', []);
+    try {
+        const { getFacebookPages } = require('./facebookOAuth');
+        const pages = await getFacebookPages(token);
+        store.set('fb_pages', pages);
+        return pages;
+    } catch {
+        return store.get('fb_pages', []);
+    }
+});
+
 ipcMain.handle('get-recent-posts', async () => store.get('fb_recent_posts', []));
 
+// Upload Reel ke Facebook
 ipcMain.handle('facebook:upload-reel', async (event, options) => {
-    return { success: false, error: 'Hubungkan Facebook Page terlebih dahulu via Settings' };
+    const { videoPath, pageId, caption, scheduledTime } = options;
+    const pages = store.get('fb_pages', []);
+    const page  = pages.find(p => p.id === pageId);
+
+    if (!page)                return { success: false, error: 'Page tidak ditemukan. Silakan login ulang.' };
+    if (!page.pageAccessToken) return { success: false, error: 'Page access token tidak valid. Silakan login ulang.' };
+    if (!videoPath)            return { success: false, error: 'Path video tidak valid.' };
+
+    try {
+        const { uploadReelToPage } = require('./facebookOAuth');
+        const result = await uploadReelToPage({
+            pageId, pageAccessToken: page.pageAccessToken,
+            videoPath, caption, scheduledTime
+        });
+        debugLog('facebook:upload-reel berhasil:', result);
+        return result;
+    } catch (err) {
+        debugLog('facebook:upload-reel error:', err.message);
+        return { success: false, error: err.message };
+    }
+});
+
+// --- Auto Content Generator (AI via Gemini) ---
+ipcMain.handle('auto:generate-content', async (event, options) => {
+    const { videoPath, dramaName = '', sceneHint = 'auto', platform = 'facebook' } = options;
+    if (!videoPath) return { error: 'Path video tidak valid' };
+    try {
+        return await runPython('auto_content_generator.py', [
+            'generate', videoPath, dramaName, sceneHint, platform
+        ]);
+    } catch (err) {
+        debugLog('auto:generate-content error:', err.message);
+        return { error: err.message };
+    }
 });
 
 // --- Growth Tracker ---
@@ -841,28 +921,6 @@ app.on('activate', () => {
 
 process.on('uncaughtException', (error) => {
     debugLog('UNCAUGHT:', error.message);
-});
-
-// --- Auto Content Generator (AI) ---
-ipcMain.handle('auto:generate-content', async (event, options) => {
-    const { videoPath, dramaName = '', sceneHint = 'auto', platform = 'facebook' } = options;
- 
-    if (!videoPath) {
-        return { error: 'Path video tidak valid' };
-    }
- 
-    try {
-        return await runPython('auto_content_generator.py', [
-            'generate',
-            videoPath,
-            dramaName,
-            sceneHint,
-            platform
-        ]);
-    } catch (err) {
-        debugLog('auto:generate-content error:', err.message);
-        return { error: err.message };
-    }
 });
 
 console.log('[INIT] Main process started');

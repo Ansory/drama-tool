@@ -15,7 +15,6 @@ const WatermarkInpainting = () => {
         const file = acceptedFiles[0];
         if (file) {
             setVideoPath(file.path);
-            // Auto detect watermarks
             const detected = await window.electron.watermarkDetect(file.path);
             setWatermarks(detected || []);
         }
@@ -64,12 +63,13 @@ const WatermarkInpainting = () => {
         setProcessing(false);
     };
 
+    // FIX: Pakai showOpenDialog via IPC (bukan window.electron.openDialog yang tidak ada)
     const handleSelectWatermark = async () => {
-        // Buka file dialog untuk pilih gambar watermark
-        const result = await window.electron.openDialog({
-            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'ico'] }]
+        const result = await window.electron.showOpenDialog({
+            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'ico'] }],
+            properties: ['openFile']
         });
-        if (result && result.filePaths && result.filePaths[0]) {
+        if (result && !result.canceled && result.filePaths && result.filePaths[0]) {
             setWatermarkSettings({ ...watermarkSettings, watermarkPath: result.filePaths[0] });
         }
     };
@@ -77,7 +77,7 @@ const WatermarkInpainting = () => {
     return (
         <div className="watermark-inpainting">
             <h2>💧 Watermark + Inpainting</h2>
-            
+
             {!videoPath ? (
                 <div {...getRootProps()} className="dropzone">
                     <input {...getInputProps()} />
@@ -86,7 +86,7 @@ const WatermarkInpainting = () => {
             ) : (
                 <div className="video-info">
                     <h3>Video: {videoPath.split('\\').pop()}</h3>
-                    
+
                     {watermarks.length > 0 && (
                         <div className="detected-watermarks">
                             <h4>🔍 Watermark Terdeteksi:</h4>
@@ -98,29 +98,39 @@ const WatermarkInpainting = () => {
                             <button onClick={handleRemoveWatermark} disabled={processing}>🗑️ Hapus Watermark</button>
                         </div>
                     )}
-                    
+
                     <div className="add-watermark">
                         <h4>➕ Tambah Watermark Baru</h4>
+                        {/* FIX: Pakai handleSelectWatermark via IPC showOpenDialog */}
                         <button onClick={handleSelectWatermark}>📁 Pilih File Watermark</button>
-                        {watermarkSettings.watermarkPath && <p>Watermark: {watermarkSettings.watermarkPath.split('\\').pop()}</p>}
-                        
+                        {watermarkSettings.watermarkPath && (
+                            <p>Watermark: {watermarkSettings.watermarkPath.split('\\').pop()}</p>
+                        )}
+
                         <label>Posisi:
-                            <select value={watermarkSettings.position} onChange={(e) => setWatermarkSettings({...watermarkSettings, position: e.target.value})}>
+                            <select
+                                value={watermarkSettings.position}
+                                onChange={(e) => setWatermarkSettings({ ...watermarkSettings, position: e.target.value })}
+                            >
                                 <option value="top-left">Atas Kiri</option>
                                 <option value="top-right">Atas Kanan</option>
                                 <option value="bottom-left">Bawah Kiri</option>
                                 <option value="bottom-right">Bawah Kanan</option>
                             </select>
                         </label>
-                        
-                        <label>Opacity: 
-                            <input type="range" min="0" max="1" step="0.1" value={watermarkSettings.opacity} onChange={(e) => setWatermarkSettings({...watermarkSettings, opacity: parseFloat(e.target.value)})} />
+
+                        <label>Opacity:
+                            <input
+                                type="range" min="0" max="1" step="0.1"
+                                value={watermarkSettings.opacity}
+                                onChange={(e) => setWatermarkSettings({ ...watermarkSettings, opacity: parseFloat(e.target.value) })}
+                            />
                             {watermarkSettings.opacity}
                         </label>
-                        
+
                         <button onClick={handleAddWatermark} disabled={processing}>💧 Tambah Watermark</button>
                     </div>
-                    
+
                     {processing && <div className="progress">Processing... Mohon tunggu</div>}
                     <button onClick={() => setVideoPath(null)} className="btn-secondary">Pilih Video Lain</button>
                 </div>

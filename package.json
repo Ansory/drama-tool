@@ -1,7 +1,7 @@
 {
   "name": "drama-tool",
-  "version": "1.0.1",
-  "description": "Video Generator + Planner Konten Drama China - Aplikasi desktop untuk content creator drama China dengan AI, auto caption, prediksi FYP, dan auto upload ke Facebook",
+  "version": "1.0.2",
+  "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "author": {
     "name": "Ansory",
@@ -17,17 +17,6 @@
   "bugs": {
     "url": "https://github.com/Ansory/drama-tool/issues"
   },
-  "keywords": [
-    "drama-china",
-    "video-editor",
-    "ai-content-generator",
-    "facebook-reels",
-    "electron-app",
-    "video-processing",
-    "fyp-predictor",
-    "auto-caption",
-    "watermark-remover"
-  ],
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development concurrently \"vite --config vite.config.mjs\" \"electron .\"",
@@ -69,7 +58,7 @@
   },
   "build": {
     "appId": "com.dramatool.app",
-    "productName": "Drama Tool",
+    "productName": "DramaTool",
     "copyright": "Copyright © 2026 Ansory",
     "directories": {
       "output": "dist",
@@ -96,16 +85,17 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "publisherName": "Drama Tool",
-      "legalTrademarks": "Drama Tool",
-      "artifactName": "${productName}-Setup-${version}.${ext}"
+      "signtoolOptions": {
+        "publisherName": "Drama Tool"
+      },
+      "artifactName": "DramaTool-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Drama Tool",
+      "shortcutName": "DramaTool",
       "installerIcon": "assets/icon.ico",
       "uninstallerIcon": "assets/icon.ico",
       "license": "assets/LICENSE.txt",
@@ -142,14 +132,5 @@
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  },
-  "os": [
-    "win32",
-    "darwin",
-    "linux"
-  ],
-  "cpu": [
-    "x64",
-    "arm64"
-  ]
+  }
 }

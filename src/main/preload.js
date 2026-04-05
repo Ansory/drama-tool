@@ -149,7 +149,9 @@ contextBridge.exposeInMainWorld('electron', {
     loadbalancerStats: () => ipcRenderer.invoke('loadbalancer:stats'),
 
     // ============ MODUL 32: FACEBOOK INTEGRATION ============
-    facebookLogin: () => ipcRenderer.invoke('facebook:login'),
+    // Facebook Login sekarang terima appId dari user (Pilihan A komersial)
+    facebookLogin: (appId) => ipcRenderer.invoke('facebook:login', appId),
+    facebookCheckLogin: () => ipcRenderer.invoke('facebook:check-login'),
     facebookUploadReel: (options) => ipcRenderer.invoke('facebook:upload-reel', options),
     facebookUploadVideo: (options) => ipcRenderer.invoke('facebook:upload-video', options),
     facebookGetInsights: (options) => ipcRenderer.invoke('facebook:get-insights', options),
@@ -213,6 +215,11 @@ contextBridge.exposeInMainWorld('electron', {
     // ============ STORE HELPERS ============
     getStore: (key) => ipcRenderer.invoke('store:get', key),
     setStore: (key, value) => ipcRenderer.invoke('store:set', key, value),
+
+    // ============ LICENSE ============
+    checkLicense: () => ipcRenderer.invoke('license:check'),
+    activateLicense: (key) => ipcRenderer.invoke('license:activate', key),
+    deactivateLicense: () => ipcRenderer.invoke('license:deactivate'),
 
     // ============ EVENT LISTENERS ============
     on: (channel, callback) => {

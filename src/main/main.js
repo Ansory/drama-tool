@@ -50,7 +50,7 @@ function createWindow() {
 
         debugLog('Window created, id:', mainWindow.id);
 
-        // DEVTOOLS AUTO-OPEN - untuk lihat error console
+        // DEVTOOLS AUTO-OPEN
         mainWindow.webContents.openDevTools({ mode: 'detach' });
         debugLog('DevTools opened');
 
@@ -154,14 +154,18 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+    debugLog('All windows closed');
     if (process.platform !== 'darwin') app.quit();
 });
 
 app.on('activate', () => {
+    debugLog('App activated');
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
 
 process.on('uncaughtException', (error) => {
     debugLog('UNCAUGHT:', error.message);
 });
+
+console.log('[INIT] Main process started');
 ```__

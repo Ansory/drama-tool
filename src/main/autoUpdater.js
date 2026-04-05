@@ -1,5 +1,5 @@
 const { autoUpdater } = require('electron-updater');
-const { dialog, ipcMain } = require('electron');
+const { dialog, ipcMain, app } = require('electron');
 const log = require('electron-log');
 
 let updaterInstance = null;
@@ -10,10 +10,14 @@ class AppUpdater {
     this.mainWindow = mainWindow;
     this.isChecking = false;
     this.downloadedUpdate = null;
-    
+
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = 'info';
-    
+
+    // Jangan auto-download, biarkan user yang memilih
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = true;
+
     this.setupEventHandlers();
   }
 
@@ -43,18 +47,14 @@ class AppUpdater {
     autoUpdater.on('download-progress', (progressObj) => {
       const percent = Math.round(progressObj.percent);
       log.info(`Download progress: ${percent}%`);
-      this.sendStatus('progress', {
-        percent: percent,
+      const data = {
+        percent,
         speed: progressObj.bytesPerSecond,
         transferred: progressObj.transferred,
         total: progressObj.total
-      });
-      this.sendEvent('updater:download-progress', {
-        percent: percent,
-        speed: progressObj.bytesPerSecond,
-        transferred: progressObj.transferred,
-        total: progressObj.total
-      });
+      };
+      this.sendStatus('progress', data);
+      this.sendEvent('updater:download-progress', data);
     });
 
     autoUpdater.on('update-downloaded', (info) => {
@@ -68,8 +68,8 @@ class AppUpdater {
   sendStatus(status, data = {}) {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('update-status', {
-        status: status,
-        data: data,
+        status,
+        data,
         timestamp: new Date().toISOString()
       });
     }
@@ -142,21 +142,39 @@ function registerIpcHandlers() {
   });
 
   ipcMain.handle('updater:get-config', async () => ({
-    autoCheck: true,
+    autoUpdate: true,
     autoDownload: false,
     channel: 'latest'
   }));
 
   ipcMain.handle('updater:update-config', async (event, config) => {
     log.info('Update config:', config);
+    if (config.autoDownload !== undefined) {
+      autoUpdater.autoDownload = config.autoDownload;
+    }
     return { success: true };
   });
 
-  ipcMain.handle('updater:get-version', async () => ({
-    current: autoUpdater.currentVersion?.version || '1.0.0',
-    latest: null,
-    updateAvailable: false
-  }));
+  // FIX: Ambil versi dari app.getVersion() bukan autoUpdater.currentVersion
+  // app.getVersion() selalu akurat sesuai package.json yang di-build
+  ipcMain.handle('updater:get-version', async () => {
+    const currentVersion = app.getVersion();
+    let latest = null;
+    let updateAvailable = false;
+
+    // Coba ambil versi terbaru jika sudah pernah cek
+    try {
+      if (autoUpdater.currentVersion) {
+        latest = autoUpdater.currentVersion.version;
+      }
+    } catch {}
+
+    return {
+      current: currentVersion,
+      latest,
+      updateAvailable
+    };
+  });
 
   ipcMain.handle('updater:get-skipped-versions', async () => skippedVersions);
 
@@ -188,16 +206,17 @@ function startPeriodicUpdateCheck() {
     return;
   }
 
-  setInterval(() => {
-    updaterInstance.checkForUpdates();
-  }, 60 * 60 * 1000);
-
+  // Cek pertama kali setelah 5 detik app berjalan
   setTimeout(() => {
     updaterInstance.checkForUpdatesAndNotify();
   }, 5000);
+
+  // Cek setiap 1 jam
+  setInterval(() => {
+    updaterInstance.checkForUpdates();
+  }, 60 * 60 * 1000);
 }
 
-// CommonJS export (bukan ES6 export!)
 module.exports = {
   AppUpdater,
   initAutoUpdater,

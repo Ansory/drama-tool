@@ -1,6 +1,6 @@
 {
   "name": "drama-tool",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "author": {
@@ -81,7 +81,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "assets/icon.ico",
@@ -105,12 +107,18 @@
       "multiLanguageInstaller": true
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "icon": "assets/icon.icns",
       "category": "public.app-category.video"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "assets/icon.png",
       "category": "Video"
     },
@@ -125,7 +133,9 @@
       {
         "from": "backend/",
         "to": "backend/",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },

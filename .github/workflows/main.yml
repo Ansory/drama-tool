@@ -46,7 +46,6 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      # FIX: Baca versi dari package.json sekali, pakai di semua step berikutnya
       - name: Read version from package.json
         id: pkg
         shell: pwsh
@@ -62,6 +61,16 @@ jobs:
           key: ${{ runner.os }}-pip-${{ env.PYTHON_VERSION }}
           restore-keys: |
             ${{ runner.os }}-pip-
+
+      # FIX: Cache electron-builder binaries (NSIS, winCodeSign) agar tidak download ulang
+      # Ini mencegah error 502 saat GitHub CDN down
+      - name: Cache electron-builder binaries
+        uses: actions/cache@v4.2.3
+        with:
+          path: ~\AppData\Local\electron-builder\Cache
+          key: ${{ runner.os }}-electron-builder-cache-v1
+          restore-keys: |
+            ${{ runner.os }}-electron-builder-cache-
 
       - name: Setup Python
         uses: actions/setup-python@v5.4.0
@@ -104,7 +113,6 @@ jobs:
 
           if (-not (Test-Path "assets/icon.ico")) {
             Write-Host "Generate placeholder icon.ico..."
-            # FIX: Pakai 'magick' saja (tanpa 'convert') untuk ImageMagick v7 di Windows
             magick -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
             magick assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/icon.ico
             Remove-Item assets/temp.png -ErrorAction SilentlyContinue
@@ -136,6 +144,21 @@ jobs:
 
           Write-Host "Assets siap."
 
+      # FIX: Buat folder backend kosong jika tidak ada di repo
+      # Mencegah warning "file source doesn't exist from=backend"
+      - name: Ensure backend folder exists
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "backend")) {
+            New-Item -ItemType Directory -Force -Path backend | Out-Null
+            # Buat file placeholder agar folder tidak kosong (git tidak track empty folder)
+            "# Backend Python scripts" | Set-Content backend/.gitkeep
+            Write-Host "OK: folder backend dibuat"
+          } else {
+            Write-Host "OK: folder backend sudah ada"
+            Get-ChildItem backend -Name
+          }
+
       - name: Generate renderer files (jika belum ada)
         shell: pwsh
         run: |
@@ -151,11 +174,50 @@ jobs:
             Write-Host "OK: vite config ada"
           }
 
-      - name: Build App (Vite + Electron)
-        run: npm run build:win
+      # FIX: Pisah build Vite dan electron-builder
+      # Jika electron-builder gagal karena 502, bisa re-run step ini saja
+      - name: Build Renderer (Vite)
+        run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # FIX: Tambah retry 3x untuk electron-builder
+      # 502 error biasanya transient — retry biasanya sukses
+      - name: Build Electron Installer (with retry)
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
+          # FIX: Set custom mirror untuk electron-builder binaries sebagai fallback
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
+        run: |
+          $maxRetries = 3
+          $attempt = 0
+          $success = $false
+
+          while ($attempt -lt $maxRetries -and -not $success) {
+            $attempt++
+            Write-Host "Build attempt $attempt of $maxRetries..."
+
+            npx electron-builder --win --x64 --prepackaged dist/win-unpacked 2>&1
+            # Coba build lengkap
+            npx electron-builder --win --x64
+            if ($LASTEXITCODE -eq 0) {
+              $success = $true
+              Write-Host "Build berhasil pada attempt $attempt"
+            } else {
+              Write-Host "Build gagal (exit code $LASTEXITCODE)"
+              if ($attempt -lt $maxRetries) {
+                Write-Host "Menunggu 30 detik sebelum retry..."
+                Start-Sleep -Seconds 30
+              }
+            }
+          }
+
+          if (-not $success) {
+            Write-Host "ERROR: Build gagal setelah $maxRetries percobaan"
+            exit 1
+          }
 
       - name: List Build Output
         run: |
@@ -193,8 +255,6 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-      # FIX: Tag sekarang pakai versi dari package.json (bukan run_number)
-      # FIX: prerelease: false + make_latest: true agar electron-updater bisa deteksi
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2.2.1
@@ -221,9 +281,7 @@ jobs:
             dist/*.exe.blockmap
             dist/latest.yml
           draft: false
-          # FIX: prerelease harus false agar electron-updater channel stable bisa detect
           prerelease: false
-          # FIX: make_latest true agar GitHub menandai ini sebagai "Latest release"
           make_latest: true
           generate_release_notes: false
         env:

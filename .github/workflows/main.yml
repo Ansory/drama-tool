@@ -19,6 +19,15 @@ on:
         options:
           - 'true'
           - 'false'
+      bump_type:
+        description: 'Tipe bump versi (hanya berlaku jika create_release=true)'
+        required: false
+        default: 'patch'
+        type: choice
+        options:
+          - 'patch'
+          - 'minor'
+          - 'major'
 
 env:
   NODE_VERSION: '20'
@@ -27,7 +36,7 @@ env:
 
 jobs:
   build:
-    name: Build Drama Tool for Windows
+    name: Build DramaTool for Windows
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
@@ -40,19 +49,70 @@ jobs:
         uses: actions/checkout@v4.2.2
         with:
           fetch-depth: 0
+          # Gunakan token agar bisa push commit bump versi
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4.3.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Read version from package.json
+      - name: Setup Git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # FIX: Auto-increment versi jika ini adalah release
+      # Bump patch (1.0.2 → 1.0.3), minor (1.0.x → 1.1.0), atau major (1.x.x → 2.0.0)
+      - name: Bump version & commit
+        id: bump
+        shell: pwsh
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+        run: |
+          $bumpType = "${{ github.event.inputs.bump_type }}"
+          if (-not $bumpType) { $bumpType = "patch" }
+
+          # Baca versi sekarang
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $current = $pkg.version
+          Write-Host "Versi sekarang: $current"
+
+          # Pecah versi
+          $parts = $current.Split('.')
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          $patch = [int]$parts[2]
+
+          # Bump sesuai tipe
+          switch ($bumpType) {
+            "major" { $major++; $minor = 0; $patch = 0 }
+            "minor" { $minor++; $patch = 0 }
+            default  { $patch++ }
+          }
+
+          $newVersion = "$major.$minor.$patch"
+          Write-Host "Versi baru: $newVersion"
+
+          # Update package.json
+          $pkg.version = $newVersion
+          $pkg | ConvertTo-Json -Depth 100 | Set-Content package.json -Encoding utf8
+
+          # Commit & push
+          git add package.json
+          git commit -m "chore: bump version to $newVersion [skip ci]"
+          git push
+
+          echo "VERSION=$newVersion" >> $env:GITHUB_OUTPUT
+          Write-Host "Version bumped: $current → $newVersion"
+
+      # Baca versi dari package.json (untuk non-release build atau setelah bump)
+      - name: Read version
         id: pkg
         shell: pwsh
         run: |
           $version = node -e "process.stdout.write(require('./package.json').version)"
           echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Version: $version"
+          Write-Host "Building version: $version"
 
       - name: Cache pip packages
         uses: actions/cache@v4.2.3
@@ -62,15 +122,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # FIX: Cache electron-builder binaries (NSIS, winCodeSign) agar tidak download ulang
-      # Ini mencegah error 502 saat GitHub CDN down
+      # Cache electron-builder binaries (NSIS, winCodeSign) — cegah error 502
       - name: Cache electron-builder binaries
         uses: actions/cache@v4.2.3
         with:
           path: ~\AppData\Local\electron-builder\Cache
-          key: ${{ runner.os }}-electron-builder-cache-v1
+          key: ${{ runner.os }}-eb-cache-v2
           restore-keys: |
-            ${{ runner.os }}-electron-builder-cache-
+            ${{ runner.os }}-eb-cache-
 
       - name: Setup Python
         uses: actions/setup-python@v5.4.0
@@ -95,24 +154,24 @@ jobs:
             Write-Host "WARNING: backend/requirements.txt tidak ditemukan, skip"
           }
 
-      - name: Debug Folder Structure
+      - name: Ensure backend folder exists
+        shell: pwsh
         run: |
-          Write-Host "=== ROOT ==="
-          Get-ChildItem -Name
-          Write-Host "=== SRC ==="
-          if (Test-Path src) { Get-ChildItem src -Recurse -Name | Select-Object -First 50 }
-          Write-Host "=== ASSETS ==="
-          if (Test-Path assets) { Get-ChildItem assets -Name }
-          Write-Host "=== BACKEND ==="
-          if (Test-Path backend) { Get-ChildItem backend -Name }
+          if (-not (Test-Path "backend")) {
+            New-Item -ItemType Directory -Force -Path backend | Out-Null
+            "# Backend Python scripts" | Set-Content backend/.gitkeep
+            Write-Host "OK: folder backend dibuat"
+          } else {
+            Write-Host "OK: folder backend ada"
+          }
 
-      - name: Generate placeholder assets (jika belum ada)
+      - name: Generate placeholder assets
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path assets | Out-Null
 
           if (-not (Test-Path "assets/icon.ico")) {
-            Write-Host "Generate placeholder icon.ico..."
+            Write-Host "Generate icon.ico..."
             magick -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
             magick assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/icon.ico
             Remove-Item assets/temp.png -ErrorAction SilentlyContinue
@@ -120,76 +179,26 @@ jobs:
           }
 
           if (-not (Test-Path "assets/banner.bmp")) {
-            Write-Host "Generate placeholder banner.bmp..."
             magick -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
             Write-Host "OK: banner.bmp"
           }
 
           if (-not (Test-Path "assets/LICENSE.txt")) {
-            Write-Host "Generate placeholder LICENSE.txt..."
-            $lic = @(
-              "MIT License",
-              "",
-              "Copyright (c) 2026 Ansory",
-              "",
-              "Permission is hereby granted, free of charge, to any person obtaining a copy",
-              "of this software and associated documentation files (the Software), to deal",
-              "in the Software without restriction.",
-              "",
-              "THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND."
-            )
-            $lic | Set-Content assets/LICENSE.txt -Encoding utf8
+            @("MIT License","","Copyright (c) 2026 Ansory","","Permission is hereby granted, free of charge, to any person obtaining a copy","of this software and associated documentation files (the Software), to deal","in the Software without restriction.","","THE SOFTWARE IS PROVIDED AS IS, WITHOUT WARRANTY OF ANY KIND.") | Set-Content assets/LICENSE.txt -Encoding utf8
             Write-Host "OK: LICENSE.txt"
           }
 
-          Write-Host "Assets siap."
-
-      # FIX: Buat folder backend kosong jika tidak ada di repo
-      # Mencegah warning "file source doesn't exist from=backend"
-      - name: Ensure backend folder exists
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "backend")) {
-            New-Item -ItemType Directory -Force -Path backend | Out-Null
-            # Buat file placeholder agar folder tidak kosong (git tidak track empty folder)
-            "# Backend Python scripts" | Set-Content backend/.gitkeep
-            Write-Host "OK: folder backend dibuat"
-          } else {
-            Write-Host "OK: folder backend sudah ada"
-            Get-ChildItem backend -Name
-          }
-
-      - name: Generate renderer files (jika belum ada)
-        shell: pwsh
-        run: |
-          if (-not (Test-Path "src/renderer/index.html") -and -not (Test-Path "index.html")) {
-            Write-Host "WARNING: index.html tidak ditemukan"
-          } else {
-            Write-Host "OK: index.html ada"
-          }
-
-          if (-not (Test-Path "vite.config.mjs") -and -not (Test-Path "vite.config.js")) {
-            Write-Host "WARNING: vite config tidak ditemukan"
-          } else {
-            Write-Host "OK: vite config ada"
-          }
-
-      # FIX: Pisah build Vite dan electron-builder
-      # Jika electron-builder gagal karena 502, bisa re-run step ini saja
       - name: Build Renderer (Vite)
         run: npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
-      # FIX: Tambah retry 3x untuk electron-builder
-      # 502 error biasanya transient — retry biasanya sukses
+      # Retry 3x untuk cegah error 502 saat download NSIS
       - name: Build Electron Installer (with retry)
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096
-          # FIX: Set custom mirror untuk electron-builder binaries sebagai fallback
-          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
         run: |
           $maxRetries = 3
           $attempt = 0
@@ -198,17 +207,14 @@ jobs:
           while ($attempt -lt $maxRetries -and -not $success) {
             $attempt++
             Write-Host "Build attempt $attempt of $maxRetries..."
-
-            npx electron-builder --win --x64 --prepackaged dist/win-unpacked 2>&1
-            # Coba build lengkap
             npx electron-builder --win --x64
             if ($LASTEXITCODE -eq 0) {
               $success = $true
               Write-Host "Build berhasil pada attempt $attempt"
             } else {
-              Write-Host "Build gagal (exit code $LASTEXITCODE)"
+              Write-Host "Build gagal (exit $LASTEXITCODE)"
               if ($attempt -lt $maxRetries) {
-                Write-Host "Menunggu 30 detik sebelum retry..."
+                Write-Host "Tunggu 30 detik sebelum retry..."
                 Start-Sleep -Seconds 30
               }
             }
@@ -221,19 +227,13 @@ jobs:
 
       - name: List Build Output
         run: |
-          Write-Host "=== DIST FOLDER ==="
+          Write-Host "=== DIST ==="
           if (Test-Path dist) {
             Get-ChildItem dist -Recurse -Name | Where-Object { $_ -notlike "*win-unpacked*" }
             $exes = Get-ChildItem "dist" -Filter "*.exe" -Recurse | Where-Object { $_.FullName -notlike "*win-unpacked*" }
-            if ($exes) {
-              foreach ($exe in $exes) {
-                Write-Host "Installer: $($exe.Name) - $([math]::Round($exe.Length / 1MB, 2)) MB"
-              }
-            } else {
-              Write-Host "WARNING: Tidak ada .exe installer ditemukan"
+            foreach ($exe in $exes) {
+              Write-Host "Installer: $($exe.Name) — $([math]::Round($exe.Length/1MB,2)) MB"
             }
-          } else {
-            Write-Host "ERROR: DIST folder tidak ada!"
           }
 
       - name: Upload Installer Artifact
@@ -255,6 +255,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+      # FIX: prerelease: false + make_latest: true — wajib agar electron-updater detect
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2.2.1
@@ -267,15 +268,12 @@ jobs:
             **Channel:** stable
 
             ### Cara Install
-            1. Download file `DramaTool-Setup-*.exe` di bawah
+            1. Download `DramaTool-Setup-${{ steps.pkg.outputs.VERSION }}.exe`
             2. Jalankan sebagai Administrator
             3. Ikuti petunjuk instalasi
 
             ### Update Otomatis
-            Aplikasi akan mendeteksi update ini otomatis saat startup.
-
-            ### Catatan
-            Backend Python sudah ter-bundle, tidak perlu install Python terpisah.
+            Jika sudah install versi sebelumnya, aplikasi akan mendeteksi update ini otomatis saat startup.
           files: |
             dist/*.exe
             dist/*.exe.blockmap
@@ -294,11 +292,10 @@ jobs:
           to: ${{ secrets.TELEGRAM_TO }}
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
-            Drama Tool Build Report
+            DramaTool Build
             Versi: v${{ steps.pkg.outputs.VERSION }}
             Status: ${{ job.status }}
-            Commit: ${{ github.sha }}
-            Download dari tab Actions
+            Download: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         continue-on-error: true
 
       - name: Send Discord Notification
@@ -307,8 +304,7 @@ jobs:
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
           content: |
-            **Drama Tool v${{ steps.pkg.outputs.VERSION }}** - Status: ${{ job.status }}
-            Commit: ${{ github.sha }}
+            **DramaTool v${{ steps.pkg.outputs.VERSION }}** — ${{ job.status }}
             Download: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         continue-on-error: true
 

@@ -191,6 +191,9 @@ contextBridge.exposeInMainWorld('electron', {
     // ============ MODUL 40: GROWTH TRACKER ============
     growthTrack: (pageId) => ipcRenderer.invoke('growth:track', pageId),
 
+    // ============ AI AUTO GENERATE CONTENT ============
+    autoGenerateContent: (options) => ipcRenderer.invoke('auto:generate-content', options),
+
     // ============ MODUL 41: IMPORT FROM SOCIAL ============
     // FIX: importDownload sekarang cukup kirim { url, platform }, outputPath ditentukan main.js
     importDownload: (options) => ipcRenderer.invoke('import:download', options),

@@ -1,6 +1,6 @@
 {
   "name": "drama-tool",
-  "version": "1.0.3",
+  "version": "1.0.2",
   "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "author": {
@@ -87,9 +87,6 @@
         }
       ],
       "icon": "assets/icon.ico",
-      "signtoolOptions": {
-        "publisherName": "Drama Tool"
-      },
       "artifactName": "DramaTool-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -127,7 +124,8 @@
       "owner": "Ansory",
       "repo": "drama-tool",
       "private": false,
-      "releaseType": "release"
+      "releaseType": "release",
+      "updaterCacheDirName": "drama-tool-updater"
     },
     "extraResources": [
       {
@@ -137,7 +135,8 @@
           "**/*"
         ]
       }
-    ]
+    ],
+    "forceCodeSigning": false
   },
   "engines": {
     "node": ">=18.0.0",

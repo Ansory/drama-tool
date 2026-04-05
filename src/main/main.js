@@ -168,4 +168,3 @@ process.on('uncaughtException', (error) => {
 });
 
 console.log('[INIT] Main process started');
-```__

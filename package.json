@@ -1,6 +1,6 @@
 {
   "name": "drama-tool",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Video Generator + Planner Konten Drama China - Aplikasi desktop untuk content creator drama China dengan AI, auto caption, prediksi FYP, dan auto upload ke Facebook",
   "main": "src/main/main.js",
   "author": {

@@ -3,13 +3,14 @@ const { dialog, ipcMain } = require('electron');
 const log = require('electron-log');
 
 let updaterInstance = null;
+let skippedVersions = [];
 
 class AppUpdater {
   constructor(mainWindow) {
     this.mainWindow = mainWindow;
     this.isChecking = false;
+    this.downloadedUpdate = null;
     
-    // Setup logger
     autoUpdater.logger = log;
     autoUpdater.logger.transports.file.level = 'info';
     
@@ -17,43 +18,28 @@ class AppUpdater {
   }
 
   setupEventHandlers() {
-    // Checking for update
     autoUpdater.on('checking-for-update', () => {
       log.info('Checking for update...');
       this.sendStatus('checking');
     });
 
-    // Update available
     autoUpdater.on('update-available', (info) => {
       log.info('Update available:', info);
       this.sendStatus('available', info);
-      
-      dialog.showMessageBox(this.mainWindow, {
-        type: 'info',
-        title: 'Update Tersedia',
-        message: `Versi ${info.version} tersedia. Download sekarang?`,
-        buttons: ['Download', 'Nanti'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          autoUpdater.downloadUpdate();
-        }
-      });
+      this.sendEvent('updater:update-available', info);
     });
 
-    // Update not available
     autoUpdater.on('update-not-available', (info) => {
       log.info('Update not available:', info);
       this.sendStatus('not-available', info);
     });
 
-    // Error
     autoUpdater.on('error', (err) => {
       log.error('Error in auto-updater:', err);
       this.sendStatus('error', { message: err.message });
+      this.sendEvent('updater:error', { message: err.message });
     });
 
-    // Download progress
     autoUpdater.on('download-progress', (progressObj) => {
       const percent = Math.round(progressObj.percent);
       log.info(`Download progress: ${percent}%`);
@@ -63,24 +49,19 @@ class AppUpdater {
         transferred: progressObj.transferred,
         total: progressObj.total
       });
+      this.sendEvent('updater:download-progress', {
+        percent: percent,
+        speed: progressObj.bytesPerSecond,
+        transferred: progressObj.transferred,
+        total: progressObj.total
+      });
     });
 
-    // Update downloaded
     autoUpdater.on('update-downloaded', (info) => {
       log.info('Update downloaded:', info);
+      this.downloadedUpdate = info;
       this.sendStatus('downloaded', info);
-      
-      dialog.showMessageBox(this.mainWindow, {
-        type: 'info',
-        title: 'Update Siap',
-        message: 'Update telah di-download. Restart aplikasi sekarang?',
-        buttons: ['Restart', 'Nanti'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          autoUpdater.quitAndInstall();
-        }
-      });
+      this.sendEvent('updater:update-downloaded', info);
     });
   }
 
@@ -94,12 +75,14 @@ class AppUpdater {
     }
   }
 
-  async checkForUpdates() {
-    if (this.isChecking) {
-      log.info('Already checking for updates');
-      return;
+  sendEvent(channel, data) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, data);
     }
-    
+  }
+
+  async checkForUpdates() {
+    if (this.isChecking) return;
     try {
       this.isChecking = true;
       log.info('Starting update check...');
@@ -120,15 +103,35 @@ class AppUpdater {
       log.error('Failed to check for updates:', error);
     }
   }
+
+  async downloadUpdate() {
+    try {
+      log.info('Starting download update...');
+      await autoUpdater.downloadUpdate();
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to download update:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async installUpdate() {
+    try {
+      log.info('Installing update...');
+      autoUpdater.quitAndInstall();
+      return { success: true };
+    } catch (error) {
+      log.error('Failed to install update:', error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
-// Factory function untuk inisialisasi
 function initAutoUpdater(mainWindow) {
   updaterInstance = new AppUpdater(mainWindow);
   return updaterInstance;
 }
 
-// Register IPC handlers untuk auto updater
 function registerIpcHandlers() {
   ipcMain.handle('updater:check', async () => {
     if (updaterInstance) {
@@ -138,41 +141,57 @@ function registerIpcHandlers() {
     return { success: false, error: 'Updater not initialized' };
   });
 
-  ipcMain.handle('updater:get-config', async () => {
-    return {
-      autoCheck: true,
-      autoDownload: false,
-      channel: 'latest'
-    };
-  });
+  ipcMain.handle('updater:get-config', async () => ({
+    autoCheck: true,
+    autoDownload: false,
+    channel: 'latest'
+  }));
 
   ipcMain.handle('updater:update-config', async (event, config) => {
     log.info('Update config:', config);
     return { success: true };
   });
 
-  ipcMain.handle('updater:get-version', async () => {
-    return {
-      current: autoUpdater.currentVersion?.version || '1.0.0',
-      latest: null,
-      updateAvailable: false
-    };
+  ipcMain.handle('updater:get-version', async () => ({
+    current: autoUpdater.currentVersion?.version || '1.0.0',
+    latest: null,
+    updateAvailable: false
+  }));
+
+  ipcMain.handle('updater:get-skipped-versions', async () => skippedVersions);
+
+  ipcMain.handle('updater:skip-update', async (event, version) => {
+    if (version && !skippedVersions.includes(version)) {
+      skippedVersions.push(version);
+    }
+    return { success: true };
+  });
+
+  ipcMain.handle('updater:download-update', async () => {
+    if (updaterInstance) {
+      return await updaterInstance.downloadUpdate();
+    }
+    return { success: false, error: 'Updater not initialized' };
+  });
+
+  ipcMain.handle('updater:install-update', async () => {
+    if (updaterInstance) {
+      return await updaterInstance.installUpdate();
+    }
+    return { success: false, error: 'Updater not initialized' };
   });
 }
 
-// Start periodic update check (setiap 1 jam)
 function startPeriodicUpdateCheck() {
   if (!updaterInstance) {
     log.warn('Cannot start periodic check: updater not initialized');
     return;
   }
 
-  // Check setiap 1 jam
   setInterval(() => {
     updaterInstance.checkForUpdates();
   }, 60 * 60 * 1000);
 
-  // Check saat startup (delay 5 detik)
   setTimeout(() => {
     updaterInstance.checkForUpdatesAndNotify();
   }, 5000);

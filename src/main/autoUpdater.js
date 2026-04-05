@@ -1,6 +1,8 @@
 const { autoUpdater } = require('electron-updater');
-const { dialog } = require('electron');
+const { dialog, ipcMain } = require('electron');
 const log = require('electron-log');
+
+let updaterInstance = null;
 
 class AppUpdater {
   constructor(mainWindow) {
@@ -122,22 +124,63 @@ class AppUpdater {
 
 // Factory function untuk inisialisasi
 function initAutoUpdater(mainWindow) {
-  const updater = new AppUpdater(mainWindow);
-  
-  // Check updates setiap 1 jam
+  updaterInstance = new AppUpdater(mainWindow);
+  return updaterInstance;
+}
+
+// Register IPC handlers untuk auto updater
+function registerIpcHandlers() {
+  ipcMain.handle('updater:check', async () => {
+    if (updaterInstance) {
+      await updaterInstance.checkForUpdates();
+      return { success: true };
+    }
+    return { success: false, error: 'Updater not initialized' };
+  });
+
+  ipcMain.handle('updater:get-config', async () => {
+    return {
+      autoCheck: true,
+      autoDownload: false,
+      channel: 'latest'
+    };
+  });
+
+  ipcMain.handle('updater:update-config', async (event, config) => {
+    log.info('Update config:', config);
+    return { success: true };
+  });
+
+  ipcMain.handle('updater:get-version', async () => {
+    return {
+      current: autoUpdater.currentVersion?.version || '1.0.0',
+      latest: null,
+      updateAvailable: false
+    };
+  });
+}
+
+// Start periodic update check (setiap 1 jam)
+function startPeriodicUpdateCheck() {
+  if (!updaterInstance) {
+    log.warn('Cannot start periodic check: updater not initialized');
+    return;
+  }
+
+  // Check setiap 1 jam
   setInterval(() => {
-    updater.checkForUpdates();
+    updaterInstance.checkForUpdates();
   }, 60 * 60 * 1000);
 
   // Check saat startup (delay 5 detik)
   setTimeout(() => {
-    updater.checkForUpdatesAndNotify();
+    updaterInstance.checkForUpdatesAndNotify();
   }, 5000);
-
-  return updater;
 }
 
 module.exports = {
   AppUpdater,
-  initAutoUpdater
+  initAutoUpdater,
+  registerIpcHandlers,
+  startPeriodicUpdateCheck
 };

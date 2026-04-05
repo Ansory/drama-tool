@@ -197,6 +197,7 @@ function startPeriodicUpdateCheck() {
   }, 5000);
 }
 
+// CommonJS export (bukan ES6 export!)
 module.exports = {
   AppUpdater,
   initAutoUpdater,

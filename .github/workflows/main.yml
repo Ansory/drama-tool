@@ -46,6 +46,15 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      # FIX: Baca versi dari package.json sekali, pakai di semua step berikutnya
+      - name: Read version from package.json
+        id: pkg
+        shell: pwsh
+        run: |
+          $version = node -e "process.stdout.write(require('./package.json').version)"
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Version: $version"
+
       - name: Cache pip packages
         uses: actions/cache@v4.2.3
         with:
@@ -95,15 +104,16 @@ jobs:
 
           if (-not (Test-Path "assets/icon.ico")) {
             Write-Host "Generate placeholder icon.ico..."
-            magick convert -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
-            magick convert assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/icon.ico
+            # FIX: Pakai 'magick' saja (tanpa 'convert') untuk ImageMagick v7 di Windows
+            magick -size 256x256 xc:"#1a73e8" -fill white -font Arial -pointsize 96 -gravity center -annotate 0 "DT" assets/temp.png
+            magick assets/temp.png -define icon:auto-resize="256,128,64,48,32,16" assets/icon.ico
             Remove-Item assets/temp.png -ErrorAction SilentlyContinue
             Write-Host "OK: icon.ico"
           }
 
           if (-not (Test-Path "assets/banner.bmp")) {
             Write-Host "Generate placeholder banner.bmp..."
-            magick convert -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
+            magick -size 164x314 gradient:"#1a73e8-#0d47a1" -fill white -font Arial -pointsize 18 -gravity center -annotate 0 "DramaTool" assets/banner.bmp
             Write-Host "OK: banner.bmp"
           }
 
@@ -167,7 +177,7 @@ jobs:
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: DramaTool-Setup
+          name: DramaTool-Setup-v${{ steps.pkg.outputs.VERSION }}
           path: |
             dist/*.exe
             dist/*.exe.blockmap
@@ -178,24 +188,44 @@ jobs:
       - name: Upload Portable Artifact
         uses: actions/upload-artifact@v4.6.2
         with:
-          name: DramaTool-Portable
+          name: DramaTool-Portable-v${{ steps.pkg.outputs.VERSION }}
           path: dist/win-unpacked/
           if-no-files-found: warn
           retention-days: 7
 
+      # FIX: Tag sekarang pakai versi dari package.json (bukan run_number)
+      # FIX: prerelease: false + make_latest: true agar electron-updater bisa deteksi
       - name: Create GitHub Release
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
         uses: softprops/action-gh-release@v2.2.1
         with:
-          name: Drama Tool v${{ github.run_number }}
-          tag_name: v1.0.${{ github.run_number }}
+          name: DramaTool v${{ steps.pkg.outputs.VERSION }}
+          tag_name: v${{ steps.pkg.outputs.VERSION }}
+          body: |
+            ## DramaTool v${{ steps.pkg.outputs.VERSION }}
+
+            **Channel:** stable
+
+            ### Cara Install
+            1. Download file `DramaTool-Setup-*.exe` di bawah
+            2. Jalankan sebagai Administrator
+            3. Ikuti petunjuk instalasi
+
+            ### Update Otomatis
+            Aplikasi akan mendeteksi update ini otomatis saat startup.
+
+            ### Catatan
+            Backend Python sudah ter-bundle, tidak perlu install Python terpisah.
           files: |
             dist/*.exe
             dist/*.exe.blockmap
             dist/latest.yml
           draft: false
+          # FIX: prerelease harus false agar electron-updater channel stable bisa detect
           prerelease: false
-          generate_release_notes: true
+          # FIX: make_latest true agar GitHub menandai ini sebagai "Latest release"
+          make_latest: true
+          generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -207,6 +237,7 @@ jobs:
           token: ${{ secrets.TELEGRAM_TOKEN }}
           message: |
             Drama Tool Build Report
+            Versi: v${{ steps.pkg.outputs.VERSION }}
             Status: ${{ job.status }}
             Commit: ${{ github.sha }}
             Download dari tab Actions
@@ -218,7 +249,7 @@ jobs:
         with:
           webhook-url: ${{ secrets.DISCORD_WEBHOOK }}
           content: |
-            Drama Tool Build - Status: ${{ job.status }}
+            **Drama Tool v${{ steps.pkg.outputs.VERSION }}** - Status: ${{ job.status }}
             Commit: ${{ github.sha }}
             Download: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         continue-on-error: true

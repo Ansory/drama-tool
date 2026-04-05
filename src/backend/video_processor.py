@@ -19,7 +19,7 @@ def get_video_info(video_path):
     cap = cv2.VideoCapture(video_path)
     info = {
         'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
-        'height': int(cv2.CAP_PROP_FRAME_HEIGHT)),
+        'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         'fps': cap.get(cv2.CAP_PROP_FPS),
         'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
         'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)

@@ -154,16 +154,11 @@ contextBridge.exposeInMainWorld('electron', {
     facebookUploadVideo: (options) => ipcRenderer.invoke('facebook:upload-video', options),
     facebookGetInsights: (options) => ipcRenderer.invoke('facebook:get-insights', options),
 
-    // ============ MODUL 33: AUTO UPDATE / SETTINGS ============
-    // FIX: Semua fungsi update yang sebelumnya tidak ada di preload
-    getConfig: () => ipcRenderer.invoke('get-config'),
-    updateConfig: (config) => ipcRenderer.invoke('update-config', config),
-    getVersion: () => ipcRenderer.invoke('get-version'),
-    checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
-    downloadUpdate: () => ipcRenderer.invoke('download-update'),
-    installUpdate: () => ipcRenderer.invoke('install-update'),
-    getSkippedVersions: () => ipcRenderer.invoke('get-skipped-versions'),
-    skipUpdate: (version) => ipcRenderer.invoke('skip-update', version),
+    // ============ MODUL 33: AUTO UPDATE ============
+    getConfig: () => ipcRenderer.invoke('updater:get-config'),
+    updateConfig: (config) => ipcRenderer.invoke('updater:update-config', config),
+    getVersion: () => ipcRenderer.invoke('updater:get-version'),
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
 
     // ============ MODUL 35: CONTENT REPURPOSING ============
     repurposeResize: (options) => ipcRenderer.invoke('repurpose:resize', options),
@@ -203,20 +198,15 @@ contextBridge.exposeInMainWorld('electron', {
     shellShowItemInFolder: (path) => ipcRenderer.invoke('shell:show-item-in-folder', path),
 
     // ============ STORE HELPERS ============
-    // FIX: Sebelumnya tidak ada di preload - dibutuhkan BurnoutProtection, FacebookIntegration, RightsManager
     getStore: (key) => ipcRenderer.invoke('store:get', key),
     setStore: (key, value) => ipcRenderer.invoke('store:set', key, value),
 
-    // ============ EVENT LISTENERS (dari main process ke renderer) ============
-    // FIX: Tambah semua event update yang dibutuhkan UpdateNotification.jsx
-    onUpdateAvailable: (callback) => ipcRenderer.on('update-available', callback),
-    onUpdateDownloadProgress: (callback) => ipcRenderer.on('update-download-progress', callback),
-    onUpdateDownloaded: (callback) => ipcRenderer.on('update-downloaded', callback),
-    onUpdateError: (callback) => ipcRenderer.on('update-error', callback),
+    // ============ EVENT LISTENERS ============
+    onUpdateStatus: (callback) => ipcRenderer.on('update-status', (event, ...args) => callback(...args)),
 
     on: (channel, callback) => {
         const validChannels = [
-            'update-available', 'update-downloaded', 'update-error',
+            'update-status', 'update-available', 'update-downloaded', 'update-error',
             'update-download-progress', 'viral-alert', 'copyright-strike', 'upload-complete'
         ];
         if (validChannels.includes(channel)) {

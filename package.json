@@ -1,6 +1,6 @@
 {
   "name": "drama-tool",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Video Generator + Planner Konten Drama China",
   "main": "src/main/main.js",
   "author": {

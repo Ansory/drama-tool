@@ -1,134 +1,143 @@
-/**
- * autoUpdater.js
- * Menangani semua logika auto-update di Electron main process.
- * FIXED: Tambah handler get-version (async), get-skipped-versions,
- *        dan skip-update menggunakan electron-store (bukan localStorage).
- */
-
 const { autoUpdater } = require('electron-updater');
-const { ipcMain, shell, app } = require('electron');
-const Store = require('electron-store');
-const store = new Store();
+const { dialog } = require('electron');
+const log = require('electron-log');
 
-let mainWindow = null;
+class AppUpdater {
+  constructor(mainWindow) {
+    this.mainWindow = mainWindow;
+    this.isChecking = false;
+    
+    // Setup logger
+    autoUpdater.logger = log;
+    autoUpdater.logger.transports.file.level = 'info';
+    
+    this.setupEventHandlers();
+  }
 
-function initAutoUpdater(win) {
-  mainWindow = win;
-
-  // ── Konfigurasi ───────────────────────────────────────────────────────────
-  autoUpdater.autoDownload = false;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  // ── Event listeners dari electron-updater ─────────────────────────────────
-  autoUpdater.on('update-available', (info) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update-available', info);
-    }
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update-download-progress', progress);
-    }
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update-downloaded', info);
-    }
-  });
-
-  autoUpdater.on('error', (err) => {
-    if (mainWindow) {
-      mainWindow.webContents.send('update-error', err.message);
-    }
-  });
-}
-
-function registerIpcHandlers() {
-  // ── Config ──────────────────────────────────────────────────────────────
-  ipcMain.handle('get-config', () => {
-    return store.get('config', {
-      autoUpdate: true,
-      updateChannel: 'stable',
-      checkInterval: 6,
+  setupEventHandlers() {
+    // Checking for update
+    autoUpdater.on('checking-for-update', () => {
+      log.info('Checking for update...');
+      this.sendStatus('checking');
     });
-  });
 
-  ipcMain.handle('update-config', (event, config) => {
-    store.set('config', config);
+    // Update available
+    autoUpdater.on('update-available', (info) => {
+      log.info('Update available:', info);
+      this.sendStatus('available', info);
+      
+      dialog.showMessageBox(this.mainWindow, {
+        type: 'info',
+        title: 'Update Tersedia',
+        message: `Versi ${info.version} tersedia. Download sekarang?`,
+        buttons: ['Download', 'Nanti'],
+        defaultId: 0
+      }).then(({ response }) => {
+        if (response === 0) {
+          autoUpdater.downloadUpdate();
+        }
+      });
+    });
 
-    // Terapkan channel update langsung
-    if (config.updateChannel) {
-      autoUpdater.channel = config.updateChannel;
+    // Update not available
+    autoUpdater.on('update-not-available', (info) => {
+      log.info('Update not available:', info);
+      this.sendStatus('not-available', info);
+    });
+
+    // Error
+    autoUpdater.on('error', (err) => {
+      log.error('Error in auto-updater:', err);
+      this.sendStatus('error', { message: err.message });
+    });
+
+    // Download progress
+    autoUpdater.on('download-progress', (progressObj) => {
+      const percent = Math.round(progressObj.percent);
+      log.info(`Download progress: ${percent}%`);
+      this.sendStatus('progress', {
+        percent: percent,
+        speed: progressObj.bytesPerSecond,
+        transferred: progressObj.transferred,
+        total: progressObj.total
+      });
+    });
+
+    // Update downloaded
+    autoUpdater.on('update-downloaded', (info) => {
+      log.info('Update downloaded:', info);
+      this.sendStatus('downloaded', info);
+      
+      dialog.showMessageBox(this.mainWindow, {
+        type: 'info',
+        title: 'Update Siap',
+        message: 'Update telah di-download. Restart aplikasi sekarang?',
+        buttons: ['Restart', 'Nanti'],
+        defaultId: 0
+      }).then(({ response }) => {
+        if (response === 0) {
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+  }
+
+  sendStatus(status, data = {}) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('update-status', {
+        status: status,
+        data: data,
+        timestamp: new Date().toISOString()
+      });
     }
-    return true;
-  });
+  }
 
-  // FIXED: get-version sebagai IPC handler (async-safe)
-  ipcMain.handle('get-version', () => {
-    return app.getVersion();
-  });
-
-  // ── Update actions ────────────────────────────────────────────────────────
-  ipcMain.handle('check-for-updates', async () => {
+  async checkForUpdates() {
+    if (this.isChecking) {
+      log.info('Already checking for updates');
+      return;
+    }
+    
     try {
-      const result = await autoUpdater.checkForUpdates();
-      return {
-        updateAvailable: !!result?.updateInfo,
-        version: result?.updateInfo?.version,
-      };
-    } catch (err) {
-      console.error('Check for updates error:', err);
-      return { updateAvailable: false };
+      this.isChecking = true;
+      log.info('Starting update check...');
+      await autoUpdater.checkForUpdates();
+    } catch (error) {
+      log.error('Failed to check for updates:', error);
+      this.sendStatus('error', { message: error.message });
+    } finally {
+      this.isChecking = false;
     }
-  });
+  }
 
-  ipcMain.handle('download-update', () => {
-    autoUpdater.downloadUpdate();
-  });
-
-  ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall(false, true);
-  });
-
-  // FIXED: Simpan skipped versions di electron-store (bukan localStorage renderer)
-  ipcMain.handle('get-skipped-versions', () => {
-    return store.get('skippedVersions', []);
-  });
-
-  ipcMain.handle('skip-update', (event, version) => {
-    const skipped = store.get('skippedVersions', []);
-    if (!skipped.includes(version)) {
-      skipped.push(version);
-      store.set('skippedVersions', skipped);
+  async checkForUpdatesAndNotify() {
+    try {
+      log.info('Checking for updates and notify...');
+      await autoUpdater.checkForUpdatesAndNotify();
+    } catch (error) {
+      log.error('Failed to check for updates:', error);
     }
-  });
-
-  // ── Utilitas ──────────────────────────────────────────────────────────────
-  });
+  }
 }
 
-/**
- * Cek update secara periodik sesuai interval dari config.
- * Dipanggil dari main.js setelah app ready.
- */
-function startPeriodicUpdateCheck() {
-  const config = store.get('config', { autoUpdate: true, checkInterval: 6 });
-
-  if (!config.autoUpdate) return;
-
-  const intervalMs = (config.checkInterval || 6) * 60 * 60 * 1000;
-
-  // Cek pertama kali setelah 30 detik app berjalan
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(console.error);
-  }, 30_000);
-
-  // Cek berikutnya sesuai interval
+// Factory function untuk inisialisasi
+function initAutoUpdater(mainWindow) {
+  const updater = new AppUpdater(mainWindow);
+  
+  // Check updates setiap 1 jam
   setInterval(() => {
-    autoUpdater.checkForUpdates().catch(console.error);
-  }, intervalMs);
+    updater.checkForUpdates();
+  }, 60 * 60 * 1000);
+
+  // Check saat startup (delay 5 detik)
+  setTimeout(() => {
+    updater.checkForUpdatesAndNotify();
+  }, 5000);
+
+  return updater;
 }
 
-module.exports = { initAutoUpdater, registerIpcHandlers, startPeriodicUpdateCheck };
+module.exports = {
+  AppUpdater,
+  initAutoUpdater
+};

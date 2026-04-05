@@ -106,8 +106,6 @@ function registerIpcHandlers() {
   });
 
   // ── Utilitas ──────────────────────────────────────────────────────────────
-  ipcMain.handle('open-external', (event, url) => {
-    shell.openExternal(url);
   });
 }
 

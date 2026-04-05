@@ -1,186 +1,167 @@
-const { autoUpdater } = require('electron-updater');
-const { dialog, ipcMain } = require('electron');
-const log = require('electron-log');
+const { app, BrowserWindow, ipcMain, dialog, shell, Notification } = require('electron');
+const path = require('path');
+const fs = require('fs');
+const { exec } = require('child_process');
+const ffmpeg = require('fluent-ffmpeg');
+const ffmpegPath = require('ffmpeg-static');
+const Store = require('electron-store');
 
-let updaterInstance = null;
+// Setup FFmpeg
+ffmpeg.setFfmpegPath(ffmpegPath);
 
-class AppUpdater {
-  constructor(mainWindow) {
-    this.mainWindow = mainWindow;
-    this.isChecking = false;
-    
-    // Setup logger
-    autoUpdater.logger = log;
-    autoUpdater.logger.transports.file.level = 'info';
-    
-    this.setupEventHandlers();
-  }
+// Initialize store
+const store = new Store();
 
-  setupEventHandlers() {
-    // Checking for update
-    autoUpdater.on('checking-for-update', () => {
-      log.info('Checking for update...');
-      this.sendStatus('checking');
-    });
+let mainWindow;
 
-    // Update available
-    autoUpdater.on('update-available', (info) => {
-      log.info('Update available:', info);
-      this.sendStatus('available', info);
-      
-      dialog.showMessageBox(this.mainWindow, {
-        type: 'info',
-        title: 'Update Tersedia',
-        message: `Versi ${info.version} tersedia. Download sekarang?`,
-        buttons: ['Download', 'Nanti'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          autoUpdater.downloadUpdate();
-        }
-      });
-    });
+// ==================== DEBUG LOGGING ====================
+function debugLog(msg, ...args) {
+    console.log(`[DEBUG] ${msg}`, ...args);
+    try {
+        const logPath = path.join(app.getPath('userData'), 'debug.log');
+        const timestamp = new Date().toISOString();
+        const logLine = `[${timestamp}] ${msg} ${args.map(a => JSON.stringify(a)).join(' ')}\n`;
+        fs.appendFileSync(logPath, logLine);
+    } catch (e) {}
+}
 
-    // Update not available
-    autoUpdater.on('update-not-available', (info) => {
-      log.info('Update not available:', info);
-      this.sendStatus('not-available', info);
-    });
-
-    // Error
-    autoUpdater.on('error', (err) => {
-      log.error('Error in auto-updater:', err);
-      this.sendStatus('error', { message: err.message });
-    });
-
-    // Download progress
-    autoUpdater.on('download-progress', (progressObj) => {
-      const percent = Math.round(progressObj.percent);
-      log.info(`Download progress: ${percent}%`);
-      this.sendStatus('progress', {
-        percent: percent,
-        speed: progressObj.bytesPerSecond,
-        transferred: progressObj.transferred,
-        total: progressObj.total
-      });
-    });
-
-    // Update downloaded
-    autoUpdater.on('update-downloaded', (info) => {
-      log.info('Update downloaded:', info);
-      this.sendStatus('downloaded', info);
-      
-      dialog.showMessageBox(this.mainWindow, {
-        type: 'info',
-        title: 'Update Siap',
-        message: 'Update telah di-download. Restart aplikasi sekarang?',
-        buttons: ['Restart', 'Nanti'],
-        defaultId: 0
-      }).then(({ response }) => {
-        if (response === 0) {
-          autoUpdater.quitAndInstall();
-        }
-      });
-    });
-  }
-
-  sendStatus(status, data = {}) {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send('update-status', {
-        status: status,
-        data: data,
-        timestamp: new Date().toISOString()
-      });
-    }
-  }
-
-  async checkForUpdates() {
-    if (this.isChecking) {
-      log.info('Already checking for updates');
-      return;
-    }
+// ==================== WINDOW CREATION ====================
+function createWindow() {
+    debugLog('Creating window...');
     
     try {
-      this.isChecking = true;
-      log.info('Starting update check...');
-      await autoUpdater.checkForUpdates();
+        mainWindow = new BrowserWindow({
+            width: 1400,
+            height: 900,
+            minWidth: 1200,
+            minHeight: 700,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js'),
+                devTools: true
+            },
+            icon: path.join(__dirname, '../../assets/icon.ico'),
+            title: 'Drama Tool',
+            backgroundColor: '#0f0f0f',
+            show: false,
+            center: true
+        });
+
+        debugLog('Window created, id:', mainWindow.id);
+
+        // DEVTOOLS AUTO-OPEN - untuk lihat error console
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+        debugLog('DevTools opened');
+
+        mainWindow.webContents.on('did-start-loading', () => {
+            debugLog('Page started loading');
+        });
+
+        mainWindow.webContents.on('did-finish-load', () => {
+            debugLog('Page finished loading');
+            mainWindow.show();
+            mainWindow.focus();
+            debugLog('Window shown');
+        });
+
+        mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+            debugLog('FAILED TO LOAD:', errorCode, errorDescription, validatedURL);
+            dialog.showErrorBox('Load Error', `Error: ${errorDescription}\nCode: ${errorCode}`);
+        });
+
+        mainWindow.webContents.on('crashed', (event, killed) => {
+            debugLog('RENDERER CRASHED:', killed);
+            dialog.showErrorBox('Crash', 'Renderer crashed!');
+        });
+
+        mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+            debugLog(`CONSOLE [${level}]:`, message, `(${sourceId}:${line})`);
+        });
+
+        // Check paths
+        const preloadPath = path.join(__dirname, 'preload.js');
+        debugLog('Preload path:', preloadPath, 'Exists:', fs.existsSync(preloadPath));
+
+        // Check index.html paths
+        const possiblePaths = [
+            path.join(__dirname, '../../dist/renderer/index.html'),
+            path.join(process.resourcesPath, 'app/dist/renderer/index.html'),
+            path.join(app.getAppPath(), 'dist/renderer/index.html'),
+            path.join(__dirname, '../renderer/index.html')
+        ];
+        
+        debugLog('Checking index.html paths...');
+        let loadURL = null;
+        for (const p of possiblePaths) {
+            const exists = fs.existsSync(p);
+            debugLog('Path:', p, 'Exists:', exists);
+            if (exists && !loadURL) loadURL = p;
+        }
+        
+        if (!loadURL) {
+            debugLog('ERROR: No index.html found!');
+            dialog.showErrorBox('Error', 'index.html not found!');
+            return;
+        }
+        
+        debugLog('Loading:', loadURL);
+        mainWindow.loadFile(loadURL);
+
+        // Fallback: force show after 3 seconds
+        setTimeout(() => {
+            if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+                debugLog('Fallback: forcing window show');
+                mainWindow.show();
+                mainWindow.focus();
+            }
+        }, 3000);
+
     } catch (error) {
-      log.error('Failed to check for updates:', error);
-      this.sendStatus('error', { message: error.message });
-    } finally {
-      this.isChecking = false;
+        debugLog('ERROR:', error.message);
+        dialog.showErrorBox('Fatal Error', error.message);
     }
-  }
-
-  async checkForUpdatesAndNotify() {
-    try {
-      log.info('Checking for updates and notify...');
-      await autoUpdater.checkForUpdatesAndNotify();
-    } catch (error) {
-      log.error('Failed to check for updates:', error);
-    }
-  }
 }
 
-// Factory function untuk inisialisasi
-function initAutoUpdater(mainWindow) {
-  updaterInstance = new AppUpdater(mainWindow);
-  return updaterInstance;
-}
+// ==================== IPC HANDLERS ====================
+ipcMain.handle('store:get', async (event, key) => store.get(key, null));
+ipcMain.handle('store:set', async (event, key, value) => { store.set(key, value); return { success: true }; });
 
-// Register IPC handlers untuk auto updater
-function registerIpcHandlers() {
-  ipcMain.handle('updater:check', async () => {
-    if (updaterInstance) {
-      await updaterInstance.checkForUpdates();
-      return { success: true };
-    }
-    return { success: false, error: 'Updater not initialized' };
-  });
+const dummyHandler = async () => ({ success: false, error: 'Not implemented' });
 
-  ipcMain.handle('updater:get-config', async () => {
-    return {
-      autoCheck: true,
-      autoDownload: false,
-      channel: 'latest'
-    };
-  });
+const dummyChannels = [
+    'video:get-info', 'watermark:detect', 'subtitle:detect',
+    'thumbnail:extract', 'content:scrape-trends', 'fyp:predict',
+    'audio:get-trending', 'hashtag:analyze', 'viral:check',
+    'facebook:login', 'autogen:title', 'copyright:precheck',
+    'backup:create', 'scheduler:list', 'team:list-members',
+    'export:pdf', 'asset:list', 'audience:demographics',
+    'comment:auto-reply', 'social:analyze-sentiment', 'affiliate:detect-products',
+    'profit:calculate', 'loadbalancer:get-keys', 'get-pages',
+    'repurpose:resize', 'burnout:track', 'template:get-all',
+    'competitor:analyze', 'royalty:search', 'growth:track',
+    'import:download', 'notify:send', 'get-recent-posts'
+];
 
-  ipcMain.handle('updater:update-config', async (event, config) => {
-    log.info('Update config:', config);
-    return { success: true };
-  });
+dummyChannels.forEach(channel => {
+    ipcMain.handle(channel, dummyHandler);
+});
 
-  ipcMain.handle('updater:get-version', async () => {
-    return {
-      current: autoUpdater.currentVersion?.version || '1.0.0',
-      latest: null,
-      updateAvailable: false
-    };
-  });
-}
+// ==================== APP LIFECYCLE ====================
+app.whenReady().then(() => {
+    debugLog('App ready');
+    createWindow();
+});
 
-// Start periodic update check (setiap 1 jam)
-function startPeriodicUpdateCheck() {
-  if (!updaterInstance) {
-    log.warn('Cannot start periodic check: updater not initialized');
-    return;
-  }
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+});
 
-  // Check setiap 1 jam
-  setInterval(() => {
-    updaterInstance.checkForUpdates();
-  }, 60 * 60 * 1000);
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
 
-  // Check saat startup (delay 5 detik)
-  setTimeout(() => {
-    updaterInstance.checkForUpdatesAndNotify();
-  }, 5000);
-}
-
-module.exports = {
-  AppUpdater,
-  initAutoUpdater,
-  registerIpcHandlers,
-  startPeriodicUpdateCheck
-};
+process.on('uncaughtException', (error) => {
+    debugLog('UNCAUGHT:', error.message);
+});
+```__

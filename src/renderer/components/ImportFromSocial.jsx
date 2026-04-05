@@ -7,9 +7,9 @@ const ImportFromSocial = () => {
     const [result, setResult] = useState(null);
 
     const platforms = [
-        { id: 'tiktok', name: 'TikTok', icon: '🎵', color: '#000000' },
-        { id: 'youtube', name: 'YouTube Shorts', icon: '▶️', color: '#ff0000' },
-        { id: 'instagram', name: 'Instagram Reels', icon: '📷', color: '#e4405f' }
+        { id: 'tiktok',    name: 'TikTok',           icon: '🎵', color: '#010101' },
+        { id: 'youtube',   name: 'YouTube Shorts',    icon: '▶️', color: '#ff0000' },
+        { id: 'instagram', name: 'Instagram Reels',   icon: '📷', color: '#e4405f' }
     ];
 
     const downloadVideo = async () => {
@@ -18,14 +18,35 @@ const ImportFromSocial = () => {
             return;
         }
         setDownloading(true);
-        const outputPath = `C:\\Users\\${require('os').userInfo().username}\\Downloads\\imported_video.mp4`;
-        const downloadResult = await window.electron.importDownload({ url, outputPath });
-        
-        // Remove watermark
-        const cleanPath = outputPath.replace('.mp4', '_clean.mp4');
-        await window.electron.importRemoveWatermark({ inputPath: outputPath, outputPath: cleanPath, platform });
-        
-        setResult({ original: outputPath, clean: cleanPath });
+
+        try {
+            // FIX: Tidak pakai require('os') di renderer — path ditentukan di main process via IPC
+            // main.js harus handle 'import:download' dan mengembalikan outputPath
+            const downloadResult = await window.electron.importDownload({ url, platform });
+
+            if (!downloadResult.success) {
+                alert('Gagal download: ' + (downloadResult.error || 'Unknown error'));
+                setDownloading(false);
+                return;
+            }
+
+            const { outputPath } = downloadResult;
+
+            // Hapus watermark
+            const cleanResult = await window.electron.importRemoveWatermark({
+                inputPath: outputPath,
+                outputPath: outputPath.replace('.mp4', '_clean.mp4'),
+                platform
+            });
+
+            setResult({
+                original: outputPath,
+                clean: cleanResult.outputPath || outputPath.replace('.mp4', '_clean.mp4')
+            });
+        } catch (err) {
+            alert('Error: ' + err.message);
+        }
+
         setDownloading(false);
     };
 
@@ -37,11 +58,11 @@ const ImportFromSocial = () => {
     return (
         <div className="import-social">
             <h2>📥 Import dari TikTok/YouTube/Instagram</h2>
-            
+
             <div className="platform-selector">
                 {platforms.map((p) => (
-                    <button 
-                        key={p.id} 
+                    <button
+                        key={p.id}
                         className={`platform-btn ${platform === p.id ? 'active' : ''}`}
                         style={{ background: platform === p.id ? p.color : 'transparent' }}
                         onClick={() => setPlatform(p.id)}
@@ -50,10 +71,10 @@ const ImportFromSocial = () => {
                     </button>
                 ))}
             </div>
-            
+
             <div className="input-section">
-                <input 
-                    type="text" 
+                <input
+                    type="text"
                     placeholder="Tempelkan URL video di sini..."
                     value={url}
                     onChange={(e) => setUrl(e.target.value)}
@@ -62,7 +83,7 @@ const ImportFromSocial = () => {
                     {downloading ? 'Mendownload...' : '📥 Download & Hapus Watermark'}
                 </button>
             </div>
-            
+
             {result && (
                 <div className="result-section">
                     <h3>✅ Download Berhasil!</h3>
@@ -81,7 +102,7 @@ const ImportFromSocial = () => {
                     </button>
                 </div>
             )}
-            
+
             <div className="info-box">
                 <h4>📖 Catatan Penting</h4>
                 <ul>

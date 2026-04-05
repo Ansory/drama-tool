@@ -61,7 +61,7 @@ jobs:
           ffmpeg -version
 
       - name: Install NPM Dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install Python Dependencies
         run: |
@@ -137,13 +137,8 @@ jobs:
             Write-Host "OK: vite config ada"
           }
 
-      - name: Build Vite (Frontend)
-        run: npm run build
-        env:
-          NODE_OPTIONS: --max-old-space-size=4096
-
-      - name: Build Electron App (NSIS Installer)
-        run: electron-builder --win --x64
+      - name: Build App (Vite + Electron)
+        run: npm run build:win
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=4096

@@ -1,0 +1,145 @@
+/* ============ UPDATE NOTIFICATION ============ */
+.update-notification {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 16px 20px;
+  max-width: 380px;
+  z-index: 9999;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.update-notification.installing {
+  border-color: rgba(78, 205, 196, 0.4);
+}
+
+.update-notification.downloading {
+  border-color: rgba(255, 193, 7, 0.4);
+}
+
+.update-notification.available {
+  border-color: rgba(255, 107, 107, 0.4);
+}
+
+.update-icon {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+
+.update-content {
+  flex: 1;
+}
+
+.update-content h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.update-content p {
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 0;
+}
+
+.update-content details summary {
+  font-size: 12px;
+  color: #4ecdc4;
+  cursor: pointer;
+  margin-top: 6px;
+}
+
+.release-notes {
+  font-size: 12px;
+  color: #aaa;
+  margin-top: 8px;
+  max-height: 120px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  background: rgba(0,0,0,0.2);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.update-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.update-actions .btn-primary {
+  padding: 6px 14px;
+  font-size: 13px;
+  background: #ff6b6b;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin: 0;
+}
+
+.update-actions .btn-primary:hover {
+  background: #ff5252;
+}
+
+.update-actions .btn-secondary {
+  padding: 6px 14px;
+  font-size: 13px;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin: 0;
+}
+
+.update-actions .btn-secondary:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+.update-actions .btn-text {
+  padding: 6px 8px;
+  font-size: 12px;
+  background: none;
+  color: #888;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+  margin: 0;
+}
+
+.update-actions .btn-text:hover {
+  color: #ccc;
+}
+
+/* Progress bar untuk download */
+.progress-bar {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  height: 6px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4ecdc4, #ff6b6b);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}

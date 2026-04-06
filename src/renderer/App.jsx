@@ -17,6 +17,7 @@ import EngagementPredictor from './components/EngagementPredictor';
 import AutoCaption from './components/AutoCaption';
 import AutoHashtag from './components/AutoHashtag';
 import ScriptGenerator from './components/ScriptGenerator';
+import AutoContentGenerator from './components/AutoContentGenerator';
 
 import CopyrightChecker from './components/CopyrightChecker';
 import RightsManager from './components/RightsManager';
@@ -75,6 +76,7 @@ function App() {
         { id: 'autocaption',     name: '🤖 Auto Caption',          category: 'AI',             component: AutoCaption },
         { id: 'autohashtag',     name: '🔖 Auto Hashtag',          category: 'AI',             component: AutoHashtag },
         { id: 'script',          name: '📝 Script Generator',      category: 'AI',             component: ScriptGenerator },
+        { id: 'autogen',         name: '🤖 Auto Content AI',        category: 'AI',             component: AutoContentGenerator },
 
         { id: 'copyright',       name: '⚖️ Copyright Checker',     category: 'Security',       component: CopyrightChecker },
         { id: 'rights',          name: '🔒 Rights Manager',        category: 'Security',       component: RightsManager },

@@ -10,8 +10,14 @@ import cv2
 import numpy as np
 import easyocr
 
-# Inisialisasi OCR reader
-reader = easyocr.Reader(['en', 'zh'])
+# Lazy-load OCR reader to avoid slow startup and crash if easyocr not installed
+_reader = None
+
+def get_reader():
+    global _reader
+    if _reader is None:
+        _reader = easyocr.Reader(['en', 'zh'])
+    return _reader
 
 def detect_subtitle_areas(video_path, sample_interval=30):
     """Deteksi area subtitle dengan OCR"""
@@ -36,7 +42,7 @@ def detect_subtitle_areas(video_path, sample_interval=30):
             crop = frame[y:y+h, x:x+w]
             
             # OCR detection
-            results = reader.readtext(crop)
+            results = get_reader().readtext(crop)
             if results:
                 for (bbox, text, confidence) in results:
                     if confidence > 0.5 and len(text) > 3:

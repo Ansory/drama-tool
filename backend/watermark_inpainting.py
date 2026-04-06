@@ -8,7 +8,6 @@ import json
 import sys
 import cv2
 import numpy as np
-from skimage.feature import match_template
 
 def detect_watermark(video_path, template_path=None):
     """Deteksi watermark dalam video"""
@@ -115,18 +114,29 @@ def add_watermark(video_path, output_path, watermark_path, position='bottom-righ
         if not ret:
             break
         
-        # Overlay watermark
-        if watermark.shape[2] == 4:  # With alpha channel
-            alpha = watermark[:, :, 3] / 255.0 * opacity
+        # Overlay watermark with bounds checking
+        wm_y1 = max(0, pos[1])
+        wm_y2 = min(height, pos[1] + wm_height)
+        wm_x1 = max(0, pos[0])
+        wm_x2 = min(width, pos[0] + wm_width)
+
+        # Crop watermark to fit within frame bounds, accounting for negative offsets
+        wm_crop = watermark[wm_y1 - pos[1]:wm_y2 - pos[1], wm_x1 - pos[0]:wm_x2 - pos[0]]
+        if wm_crop.size == 0:
+            out.write(frame)
+            continue
+
+        if wm_crop.shape[2] == 4:  # With alpha channel
+            alpha = wm_crop[:, :, 3] / 255.0 * opacity
             for c in range(3):
-                frame[pos[1]:pos[1]+wm_height, pos[0]:pos[0]+wm_width, c] = \
-                    (1 - alpha) * frame[pos[1]:pos[1]+wm_height, pos[0]:pos[0]+wm_width, c] + \
-                    alpha * watermark[:, :, c]
+                frame[wm_y1:wm_y2, wm_x1:wm_x2, c] = \
+                    (1 - alpha) * frame[wm_y1:wm_y2, wm_x1:wm_x2, c] + \
+                    alpha * wm_crop[:, :, c]
         else:
             # No alpha, simple overlay
-            roi = frame[pos[1]:pos[1]+wm_height, pos[0]:pos[0]+wm_width]
-            blended = cv2.addWeighted(roi, 1 - opacity, watermark, opacity, 0)
-            frame[pos[1]:pos[1]+wm_height, pos[0]:pos[0]+wm_width] = blended
+            roi = frame[wm_y1:wm_y2, wm_x1:wm_x2]
+            blended = cv2.addWeighted(roi, 1 - opacity, wm_crop, opacity, 0)
+            frame[wm_y1:wm_y2, wm_x1:wm_x2] = blended
         
         out.write(frame)
     

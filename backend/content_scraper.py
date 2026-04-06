@@ -6,7 +6,6 @@ Fungsi: Scrape tren drama China dari berbagai sumber
 
 import json
 import sys
-import requests
 from datetime import datetime
 
 def get_trending_dramas(keyword='drama china'):

@@ -16,7 +16,19 @@ import ffmpeg
 
 def get_video_info(video_path):
     """Dapatkan informasi video"""
+    # Validate video file exists and is a valid video
+    if not os.path.isfile(video_path):
+        raise FileNotFoundError(f"Video file not found: {video_path}")
+
+    # Check if file is a valid video by checking extension
+    valid_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']
+    if not any(video_path.lower().endswith(ext) for ext in valid_extensions):
+        raise ValueError(f"Invalid video file format. Supported: {', '.join(valid_extensions)}")
+
     cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"Cannot open video file: {video_path}")
+
     info = {
         'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
@@ -91,28 +103,51 @@ def main():
     if len(sys.argv) < 2:
         print(json.dumps({'error': 'No command specified'}))
         return
-    
-    command = sys.argv[1]
-    
-    if command == 'info':
-        video_path = sys.argv[2]
-        info = get_video_info(video_path)
-        print(json.dumps(info))
-    
-    elif command == 'scenes':
-        video_path = sys.argv[2]
-        scenes = detect_scenes(video_path)
-        print(json.dumps(scenes))
-    
-    elif command == 'split':
-        video_path = sys.argv[2]
-        output_folder = sys.argv[3]
-        min_dur = int(sys.argv[4]) if len(sys.argv) > 4 else 15
-        max_dur = int(sys.argv[5]) if len(sys.argv) > 5 else 30
-        
-        os.makedirs(output_folder, exist_ok=True)
-        clips = split_video(video_path, output_folder, min_dur, max_dur)
-        print(json.dumps({'clips': clips, 'count': len(clips)}))
+
+    try:
+        command = sys.argv[1]
+
+        if command == 'info':
+            if len(sys.argv) < 3:
+                print(json.dumps({'error': 'Video path required'}))
+                return
+            video_path = sys.argv[2]
+            info = get_video_info(video_path)
+            print(json.dumps(info))
+
+        elif command == 'scenes':
+            if len(sys.argv) < 3:
+                print(json.dumps({'error': 'Video path required'}))
+                return
+            video_path = sys.argv[2]
+            scenes = detect_scenes(video_path)
+            print(json.dumps(scenes))
+
+        elif command == 'split':
+            if len(sys.argv) < 4:
+                print(json.dumps({'error': 'Video path and output folder required'}))
+                return
+            video_path = sys.argv[2]
+            output_folder = sys.argv[3]
+            min_dur = int(sys.argv[4]) if len(sys.argv) > 4 else 15
+            max_dur = int(sys.argv[5]) if len(sys.argv) > 5 else 30
+
+            # Validate duration values
+            if min_dur <= 0 or max_dur <= 0 or min_dur > max_dur:
+                print(json.dumps({'error': 'Invalid duration values'}))
+                return
+
+            os.makedirs(output_folder, exist_ok=True)
+            clips = split_video(video_path, output_folder, min_dur, max_dur)
+            print(json.dumps({'clips': clips, 'count': len(clips)}))
+        else:
+            print(json.dumps({'error': f'Unknown command: {command}'}))
+
+    except (FileNotFoundError, ValueError) as e:
+        print(json.dumps({'error': str(e)}))
+    except Exception as e:
+        print(json.dumps({'error': f'Unexpected error: {str(e)}'}))
+
 
 if __name__ == '__main__':
     main()

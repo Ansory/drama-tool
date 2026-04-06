@@ -10,3 +10,4 @@ pillow==10.1.0
 # Tambahan untuk gemini_load_balancer.py
 requests==2.31.0
 schedule==1.2.1
+google-generativeai>=0.3.0

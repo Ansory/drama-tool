@@ -66,7 +66,7 @@ def main():
         comments_json = sys.argv[2] if len(sys.argv) > 2 else '[]'
         try:
             comments = json.loads(comments_json)
-        except:
+        except (json.JSONDecodeError, ValueError) as e:
             comments = []
         result = analyze_sentiment(comments)
         print(json.dumps(result))

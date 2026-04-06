@@ -8,7 +8,6 @@ import json
 import sys
 import cv2
 import numpy as np
-import random
 from pathlib import Path
 
 def check_copyright(video_path):
@@ -67,10 +66,28 @@ def check_copyright(video_path):
     # Hitung tingkat kemiripan dengan konten berlisensi (simulasi)
     # Dalam implementasi nyata, ini akan menggunakan audio fingerprinting
     # atau video hashing database
-    
-    # Simulasi random score (dalam implementasi nyata, ini dari database)
-    # Semakin tinggi riskScore, semakin berbahaya
-    risk_score = random.randint(0, 100)
+
+    # Hitung risk score berdasarkan deteksi watermark dan analisis konten
+    # Base score dimulai dari 30 (risiko dasar)
+    risk_score = 30
+
+    # Tambah score jika watermark terdeteksi (kemungkinan konten berlisensi)
+    if watermark_detected:
+        risk_score += 40
+
+    # Analisis keragaman frame (semakin seragam, semakin mencurigakan)
+    if len(sample_frames) > 1:
+        frame_variances = []
+        for frame in sample_frames:
+            frame_variances.append(np.std(frame))
+        avg_variance = np.mean(frame_variances)
+
+        # Jika variance rendah (video seragam/profesional), tingkatkan risk
+        if avg_variance < 40:
+            risk_score += 20
+
+    # Pastikan score dalam range 0-100
+    risk_score = min(100, max(0, risk_score))
     
     # Audio match detection (simulasi)
     audio_match = risk_score > 70
@@ -79,8 +96,9 @@ def check_copyright(video_path):
     video_match = risk_score > 80
     
     # Fair use score (semakin banyak editing, semakin tinggi)
-    # Simulasi berdasarkan deteksi watermark dan random
-    fair_use_score = min(100, max(0, 100 - risk_score + (20 if watermark_detected else 0)))
+    # Berdasarkan analisis konten, bukan random
+    # Watermark yang terdeteksi MENURUNKAN fair use score (bukan menaikkan)
+    fair_use_score = min(100, max(0, 100 - risk_score - (10 if watermark_detected else 0)))
     
     # Rekomendasi
     if risk_score > 80:
@@ -151,9 +169,10 @@ def check_originality(video_path):
     edit_density = (scene_changes / (duration / 60)) if duration > 0 else 0
     edit_density = min(100, int(edit_density * 10))  # Normalisasi ke 0-100
     
-    # Deteksi voiceover (sederhana: cek rasio signal-to-noise)
-    # Dalam implementasi nyata, ini akan menggunakan audio processing
-    has_voiceover = random.choice([True, False])
+    # Deteksi voiceover (estimasi berdasarkan edit density)
+    # Video dengan banyak edit cenderung punya voiceover/narasi
+    # Dalam implementasi nyata, gunakan audio analysis library
+    has_voiceover = edit_density > 50  # Jika edit density tinggi, kemungkinan ada voiceover
     
     # Hitung skor originalitas
     # Bobot: edit density 40%, voiceover 30%, duration 30%

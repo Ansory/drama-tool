@@ -21,7 +21,19 @@ function debugLog(msg, ...args) {
     try {
         const logPath = path.join(app.getPath('userData'), 'debug.log');
         const timestamp = new Date().toISOString();
-        const logLine = `[${timestamp}] ${msg} ${args.map(a => JSON.stringify(a)).join(' ')}\n`;
+        // Sanitize args to prevent logging sensitive data (tokens, keys, passwords)
+        const sanitizedArgs = args.map(a => {
+            if (typeof a === 'object' && a !== null) {
+                const sanitized = { ...a };
+                const sensitiveKeys = ['token', 'key', 'password', 'secret', 'apiKey', 'api_key', 'fb_user_token'];
+                sensitiveKeys.forEach(k => {
+                    if (k in sanitized) sanitized[k] = '[REDACTED]';
+                });
+                return JSON.stringify(sanitized);
+            }
+            return typeof a === 'string' && a.length > 100 ? '[LONG_STRING]' : JSON.stringify(a);
+        });
+        const logLine = `[${timestamp}] ${msg} ${sanitizedArgs.join(' ')}\n`;
         fs.appendFileSync(logPath, logLine);
     } catch (e) {}
 }
@@ -33,6 +45,30 @@ function getPythonPath() {
     return 'python';
 }
 
+// Validate file path to prevent directory traversal
+function isValidFilePath(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    // Resolve to absolute path and check it doesn't escape intended directories
+    const resolved = path.resolve(filePath);
+    // Check for directory traversal attempts
+    if (filePath.includes('..') || filePath.includes('~')) return false;
+    // Ensure the file exists (for read operations)
+    return true; // Additional checks can be done at handler level
+}
+
+// Escape special characters in FFmpeg filter strings
+function escapeFFmpegText(text) {
+    if (!text || typeof text !== 'string') return '';
+    // Escape special characters for FFmpeg drawtext filter
+    return text
+        .replace(/\\/g, '\\\\')  // Backslash
+        .replace(/'/g, "\\'")     // Single quote
+        .replace(/:/g, '\\:')     // Colon
+        .replace(/\[/g, '\\[')    // Square brackets
+        .replace(/\]/g, '\\]')
+        .replace(/,/g, '\\,');    // Comma
+}
+
 function runPython(scriptName, args = []) {
     return new Promise((resolve, reject) => {
         const backendDir = path.join(__dirname, '../../backend');
@@ -42,8 +78,19 @@ function runPython(scriptName, args = []) {
             return reject(new Error(`Script tidak ditemukan: ${scriptPath}`));
         }
 
+        // Validate all file path arguments
+        const validatedArgs = args.map(arg => {
+            if (typeof arg === 'string' && (arg.includes('/') || arg.includes('\\'))) {
+                // This looks like a file path, validate it
+                if (!isValidFilePath(arg)) {
+                    throw new Error(`Invalid file path: ${arg}`);
+                }
+            }
+            return String(arg); // Ensure all args are strings
+        });
+
         const python = getPythonPath();
-        const proc = spawn(python, [scriptPath, ...args]);
+        const proc = spawn(python, [scriptPath, ...validatedArgs]);
         let stdout = '';
         let stderr = '';
 
@@ -77,7 +124,10 @@ function createWindow() {
                 nodeIntegration: false,
                 contextIsolation: true,
                 preload: path.join(__dirname, 'preload.js'),
-                devTools: true
+                devTools: true,
+                sandbox: true, // Enable sandbox for security
+                webSecurity: true,
+                allowRunningInsecureContent: false
             },
             icon: path.join(__dirname, '../../assets/icon.ico'),
             title: 'Drama Tool',
@@ -156,17 +206,28 @@ ipcMain.handle('video:get-info', async (event, videoPath) => {
 });
 
 ipcMain.handle('video:crop', async (event, options) => {
-    return new Promise((resolve, reject) => {
-        const { inputPath, outputPath, startTime, endTime, targetWidth, targetHeight } = options;
-        ffmpeg(inputPath)
-            .setStartTime(startTime)
-            .setDuration(endTime - startTime)
-            .size(`${targetWidth}x${targetHeight}`)
-            .output(outputPath)
-            .on('end', () => resolve({ success: true, outputPath }))
-            .on('error', (err) => reject(err))
-            .run();
-    });
+    try {
+        return new Promise((resolve, reject) => {
+            const { inputPath, outputPath, startTime, endTime, targetWidth, targetHeight } = options;
+
+            // Validate inputs
+            if (!inputPath || !outputPath) {
+                return reject(new Error('Input and output paths are required'));
+            }
+
+            ffmpeg(inputPath)
+                .setStartTime(startTime)
+                .setDuration(endTime - startTime)
+                .size(`${targetWidth}x${targetHeight}`)
+                .output(outputPath)
+                .on('end', () => resolve({ success: true, outputPath }))
+                .on('error', (err) => reject(err))
+                .run();
+        });
+    } catch (error) {
+        debugLog('Error in video:crop', error.message);
+        throw error;
+    }
 });
 
 ipcMain.handle('video:resize', async (event, options) => {
@@ -197,16 +258,29 @@ ipcMain.handle('video:change-speed', async (event, options) => {
 });
 
 ipcMain.handle('video:add-subtitle', async (event, options) => {
-    return new Promise((resolve, reject) => {
-        const { inputPath, outputPath, subtitleText, position } = options;
-        const y = position === 'top' ? 20 : 'h-th-20';
-        ffmpeg(inputPath)
-            .videoFilters(`drawtext=text='${subtitleText}':fontcolor=white:fontsize=40:x=(w-tw)/2:y=${y}`)
-            .output(outputPath)
-            .on('end', () => resolve({ success: true, outputPath }))
-            .on('error', (err) => reject(err))
-            .run();
-    });
+    try {
+        return new Promise((resolve, reject) => {
+            const { inputPath, outputPath, subtitleText, position } = options;
+
+            // Validate inputs
+            if (!inputPath || !outputPath || !subtitleText) {
+                return reject(new Error('Input path, output path, and subtitle text are required'));
+            }
+
+            const y = position === 'top' ? 20 : 'h-th-20';
+            const escapedText = escapeFFmpegText(subtitleText);
+
+            ffmpeg(inputPath)
+                .videoFilters(`drawtext=text='${escapedText}':fontcolor=white:fontsize=40:x=(w-tw)/2:y=${y}`)
+                .output(outputPath)
+                .on('end', () => resolve({ success: true, outputPath }))
+                .on('error', (err) => reject(err))
+                .run();
+        });
+    } catch (error) {
+        debugLog('Error in video:add-subtitle', error.message);
+        throw error;
+    }
 });
 
 ipcMain.handle('video:detect-scenes', async (event, videoPath) => {

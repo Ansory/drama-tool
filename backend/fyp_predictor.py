@@ -25,43 +25,54 @@ def analyze_hook_strength(frame):
     
     return min(100, score)
 
-def analyze_emotional_trigger(frame):
+def analyze_emotional_trigger(frame, rng):
     """Analisis trigger emosional (wajah, ekspresi)"""
     # Placeholder - bisa pakai face detection + emotion recognition
-    return np.random.randint(60, 95)
+    return int(rng.randint(60, 95))
 
-def analyze_audio_virality(audio_path):
+def analyze_audio_virality(audio_path, rng):
     """Analisis backsound viral"""
     # Placeholder - bisa pakai audio fingerprinting
-    return np.random.randint(50, 90)
+    return int(rng.randint(50, 90))
 
 def predict_fyp(video_path):
     """Prediksi skor FYP"""
     cap = cv2.VideoCapture(video_path)
-    
+
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    duration = frame_count / fps if fps > 0 else 0
+
+    # Deterministic seed from video properties
+    file_size = os.path.getsize(video_path) if os.path.exists(video_path) else 0
+    seed = int((frame_count + file_size + int(duration * 100) + width + height) % (2**31))
+    rng = np.random.RandomState(seed)
+
     # Ambil frame pertama untuk hook analysis
     ret, first_frame = cap.read()
     hook_score = analyze_hook_strength(first_frame) if ret else 50
     
     # Ambil sample frame untuk emotional analysis
-    cap.set(cv2.CAP_PROP_POS_FRAMES, int(cap.get(cv2.CAP_PROP_FRAME_COUNT) * 0.3))
+    cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_count * 0.3))
     ret, mid_frame = cap.read()
-    emotional_score = analyze_emotional_trigger(mid_frame) if ret else 70
+    emotional_score = analyze_emotional_trigger(mid_frame, rng) if ret else 70
     
     cap.release()
     
-    # Metrik lainnya (mock data)
+    # Metrik lainnya (placeholder dengan seed deterministik)
     metrics = {
         'hook': hook_score,
-        'retention': np.random.randint(40, 85),
+        'retention': int(rng.randint(40, 85)),
         'emotional': emotional_score,
-        'completion': np.random.randint(30, 75),
-        'shareability': np.random.randint(50, 90),
-        'comment': np.random.randint(20, 70),
-        'save': np.random.randint(40, 80),
-        'audio': np.random.randint(60, 95),
-        'hashtag': np.random.randint(50, 85),
-        'timing': np.random.randint(40, 90)
+        'completion': int(rng.randint(30, 75)),
+        'shareability': int(rng.randint(50, 90)),
+        'comment': int(rng.randint(20, 70)),
+        'save': int(rng.randint(40, 80)),
+        'audio': int(rng.randint(60, 95)),
+        'hashtag': int(rng.randint(50, 85)),
+        'timing': int(rng.randint(40, 90))
     }
     
     # Hitung skor total (weighted average)
@@ -93,10 +104,10 @@ def predict_fyp(video_path):
     if metrics['audio'] < 70:
         recommendations.append('Ganti backsound dengan yang sedang trending')
     
-    # Retention by second (mock)
+    # Retention by second (seeded)
     retention_by_second = {}
     for sec in range(3, 31, 3):
-        retention_by_second[sec] = max(10, 100 - (sec * 2) + np.random.randint(-10, 10))
+        retention_by_second[sec] = max(10, 100 - (sec * 2) + int(rng.randint(-10, 10)))
     
     return {
         'score': int(total_score),

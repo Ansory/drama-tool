@@ -44,12 +44,16 @@ def check_copyright(video_path):
     watermark_detected = False
     for frame in sample_frames:
         height, width = frame.shape[:2]
+        margin = min(100, height // 4, width // 4)
+        if margin < 10:
+            # Frame is too small for meaningful watermark analysis in corner regions
+            continue
         # Cek area pojok (biasanya watermark)
         corners = [
-            frame[0:100, 0:100],  # top-left
-            frame[0:100, width-100:width],  # top-right
-            frame[height-100:height, 0:100],  # bottom-left
-            frame[height-100:height, width-100:width]  # bottom-right
+            frame[0:margin, 0:margin],
+            frame[0:margin, width-margin:width],
+            frame[height-margin:height, 0:margin],
+            frame[height-margin:height, width-margin:width]
         ]
         
         for corner in corners:

@@ -1,6 +1,7 @@
 # Dependencies
 node_modules/
 backend/venv/
+__pycache__/
 backend/__pycache__/
 *.pyc
 *.pyo

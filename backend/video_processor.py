@@ -9,7 +9,12 @@ import sys
 import os
 import cv2
 import numpy as np
-from scenedetect import VideoManager, SceneManager
+try:
+    from scenedetect import VideoManager, SceneManager
+    _USE_VIDEO_MANAGER = True
+except ImportError:
+    from scenedetect import open_video, SceneManager
+    _USE_VIDEO_MANAGER = False
 from scenedetect.detectors import ContentDetector
 import subprocess
 import ffmpeg
@@ -29,28 +34,33 @@ def get_video_info(video_path):
     if not cap.isOpened():
         raise ValueError(f"Cannot open video file: {video_path}")
 
+    fps = cap.get(cv2.CAP_PROP_FPS)
     info = {
         'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
-        'fps': cap.get(cv2.CAP_PROP_FPS),
+        'fps': fps,
         'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+        'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps if fps > 0 else 0
     }
     cap.release()
     return info
 
 def detect_scenes(video_path, threshold=30.0):
     """Deteksi pergantian scene menggunakan PySceneDetect"""
-    video_manager = VideoManager([video_path])
     scene_manager = SceneManager()
     scene_manager.add_detector(ContentDetector(threshold=threshold))
-    
-    video_manager.start()
-    scene_manager.detect_scenes(frame_source=video_manager)
-    
-    scenes = scene_manager.get_scene_list()
-    video_manager.release()
-    
+
+    if _USE_VIDEO_MANAGER:
+        video_manager = VideoManager([video_path])
+        video_manager.start()
+        scene_manager.detect_scenes(frame_source=video_manager)
+        scenes = scene_manager.get_scene_list()
+        video_manager.release()
+    else:
+        video = open_video(video_path)
+        scene_manager.detect_scenes(video)
+        scenes = scene_manager.get_scene_list()
+
     return [(scene[0].get_seconds(), scene[1].get_seconds()) for scene in scenes]
 
 def calculate_viral_score(frame, scene_type='general'):

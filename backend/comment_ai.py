@@ -34,7 +34,7 @@ def classify_comment(comment_text):
         'needsReply': needs_reply
     }
 
-def generate_reply(comment_text, style='friendly'):
+def generate_reply(comment_text, style='friendly', drama_name=''):
     """Generate balasan komentar"""
     comment_lower = comment_text.lower()
     
@@ -65,9 +65,10 @@ def generate_reply(comment_text, style='friendly'):
     
     reply = random.choice(templates.get(category, templates['general']))
     
-    # Replace placeholders
-    reply = reply.replace('[judul]', 'The Double')
-    reply = reply.replace('[hari]', 'Senin dan Kamis')
+    # Replace placeholders with provided drama_name or generic fallback
+    name = drama_name if drama_name else 'drama ini'
+    reply = reply.replace('[judul]', name)
+    reply = reply.replace('[hari]', 'hari-hari tertentu')
     
     return reply
 
@@ -85,10 +86,18 @@ def main():
     
     elif command == 'generate':
         style = sys.argv[3] if len(sys.argv) > 3 else 'friendly'
-        reply = generate_reply(text, style)
+        drama_name = sys.argv[4] if len(sys.argv) > 4 else ''
+        reply = generate_reply(text, style, drama_name)
+        # Calculate confidence based on keyword match strength
+        comment_lower = text.lower()
+        keywords = ['apa', 'judul', 'drama', 'episode', 'siapa', 'dimana', 'kapan',
+                    'bagus', 'keren', 'mantap', 'suka', 'best', 'recommended',
+                    'jelek', 'gak suka', 'boring', 'capek', 'spam']
+        matched = sum(1 for word in keywords if word in comment_lower)
+        confidence = min(95, 60 + matched * 10)
         print(json.dumps({
             'reply': reply,
-            'confidence': random.randint(70, 95),
+            'confidence': confidence,
             'category': classify_comment(text)['category']
         }))
 

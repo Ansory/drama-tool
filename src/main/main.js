@@ -245,8 +245,9 @@ ipcMain.handle('video:resize', async (event, options) => {
 ipcMain.handle('video:change-speed', async (event, options) => {
     return new Promise((resolve, reject) => {
         const { inputPath, outputPath, speed } = options;
-        const videoFilter = `setpts=${(1 / speed).toFixed(4)}*PTS`;
-        const audioFilter = `atempo=${speed}`;
+        const clampedSpeed = Math.max(0.5, Math.min(100, speed));
+        const videoFilter = `setpts=${(1 / clampedSpeed).toFixed(4)}*PTS`;
+        const audioFilter = `atempo=${clampedSpeed}`;
         ffmpeg(inputPath)
             .videoFilters(videoFilter)
             .audioFilters(audioFilter)
@@ -326,6 +327,9 @@ ipcMain.handle('subtitle:remove', async (event, options) => {
 ipcMain.handle('thumbnail:extract', async (event, options) => {
     return new Promise((resolve) => {
         const { videoPath, timestamps, outputFolder } = options;
+        if (!timestamps || timestamps.length === 0) {
+            return resolve([]);
+        }
         fs.mkdirSync(outputFolder, { recursive: true });
         const results = [];
         let done = 0;
@@ -352,9 +356,10 @@ ipcMain.handle('thumbnail:extract', async (event, options) => {
 ipcMain.handle('thumbnail:add-text', async (event, options) => {
     return new Promise((resolve, reject) => {
         const { thumbnailPath, outputPath, text, position, fontSize, color } = options;
+        const escapedText = escapeFFmpegText(text);
         const y = position === 'top' ? 20 : position === 'center' ? '(h-th)/2' : 'h-th-20';
         ffmpeg(thumbnailPath)
-            .videoFilters(`drawtext=text='${text}':fontcolor=${color}:fontsize=${fontSize}:x=(w-tw)/2:y=${y}`)
+            .videoFilters(`drawtext=text='${escapedText}':fontcolor=${color}:fontsize=${fontSize}:x=(w-tw)/2:y=${y}`)
             .frames(1)
             .output(outputPath)
             .on('end', () => resolve({ success: true, outputPath }))

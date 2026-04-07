@@ -2,6 +2,7 @@
 """
 Video Processor - Modul 1 & 5
 Fungsi: Crop video, resize, deteksi scene, pecah video panjang
+BUG FIX v1.0.11: Division by zero handling and proper error handling
 """
 
 import json
@@ -20,12 +21,10 @@ import subprocess
 import ffmpeg
 
 def get_video_info(video_path):
-    """Dapatkan informasi video"""
-    # Validate video file exists and is a valid video
+    """Dapatkan informasi video dengan proper error handling"""
     if not os.path.isfile(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
-    # Check if file is a valid video by checking extension
     valid_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm']
     if not any(video_path.lower().endswith(ext) for ext in valid_extensions):
         raise ValueError(f"Invalid video file format. Supported: {', '.join(valid_extensions)}")
@@ -35,12 +34,23 @@ def get_video_info(video_path):
         raise ValueError(f"Cannot open video file: {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # BUG FIX: Handle fps <= 0
+    if fps <= 0:
+        fps = 30.0  # Assume default 30fps
+    
+    # BUG FIX: Handle frame_count <= 0
+    if frame_count <= 0:
+        cap.release()
+        raise ValueError(f"Invalid video: no frames detected in {video_path}")
+    
     info = {
         'width': int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)),
         'height': int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)),
         'fps': fps,
-        'frame_count': int(cap.get(cv2.CAP_PROP_FRAME_COUNT)),
-        'duration': cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps if fps > 0 else 0
+        'frame_count': frame_count,
+        'duration': frame_count / fps
     }
     cap.release()
     return info
@@ -65,12 +75,10 @@ def detect_scenes(video_path, threshold=30.0):
 
 def calculate_viral_score(frame, scene_type='general'):
     """Hitung skor viral potensial berdasarkan frame"""
-    # Simple implementation - bisa dikembangkan dengan AI
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray, 100, 200)
     edge_density = np.sum(edges > 0) / edges.size
     
-    # Higher edge density might indicate action/drama
     score = min(100, int(edge_density * 200))
     return score
 
@@ -84,28 +92,30 @@ def split_video(video_path, output_folder, min_duration=15, max_duration=30):
         if min_duration <= duration <= max_duration:
             output_path = os.path.join(output_folder, f'clip_{i+1}.mp4')
             
-            # Gunakan ffmpeg untuk memotong
-            (
-                ffmpeg
-                .input(video_path, ss=start, t=duration)
-                .output(output_path, c='copy')
-                .run(quiet=True, overwrite_output=True)
-            )
-            
-            # Baca frame pertama untuk skor viral
-            cap = cv2.VideoCapture(output_path)
-            ret, frame = cap.read()
-            viral_score = calculate_viral_score(frame) if ret else 50
-            cap.release()
-            
-            clips.append({
-                'index': i + 1,
-                'start': start,
-                'end': end,
-                'duration': duration,
-                'path': output_path,
-                'viralScore': viral_score
-            })
+            try:
+                (
+                    ffmpeg
+                    .input(video_path, ss=start, t=duration)
+                    .output(output_path, c='copy')
+                    .run(quiet=True, overwrite_output=True)
+                )
+                
+                cap = cv2.VideoCapture(output_path)
+                ret, frame = cap.read()
+                viral_score = calculate_viral_score(frame) if ret else 50
+                cap.release()
+                
+                clips.append({
+                    'index': i + 1,
+                    'start': start,
+                    'end': end,
+                    'duration': duration,
+                    'path': output_path,
+                    'viralScore': viral_score
+                })
+            except Exception as e:
+                print(f"Error processing clip {i}: {e}", file=sys.stderr)
+                continue
     
     return clips
 
@@ -142,22 +152,16 @@ def main():
             min_dur = int(sys.argv[4]) if len(sys.argv) > 4 else 15
             max_dur = int(sys.argv[5]) if len(sys.argv) > 5 else 30
 
-            # Validate duration values
-            if min_dur <= 0 or max_dur <= 0 or min_dur > max_dur:
+            if min_dur <= 0 or max_dur <= 0 or min_dur >= max_dur:
                 print(json.dumps({'error': 'Invalid duration values'}))
                 return
 
-            os.makedirs(output_folder, exist_ok=True)
             clips = split_video(video_path, output_folder, min_dur, max_dur)
-            print(json.dumps({'clips': clips, 'count': len(clips)}))
-        else:
-            print(json.dumps({'error': f'Unknown command: {command}'}))
-
-    except (FileNotFoundError, ValueError) as e:
-        print(json.dumps({'error': str(e)}))
+            print(json.dumps(clips))
+            
     except Exception as e:
-        print(json.dumps({'error': f'Unexpected error: {str(e)}'}))
-
+        print(json.dumps({'error': str(e)}))
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()

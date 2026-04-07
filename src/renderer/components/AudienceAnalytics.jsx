@@ -2,43 +2,25 @@ import React, { useState, useEffect } from 'react';
 
 const AudienceAnalytics = () => {
     const [demographics, setDemographics] = useState(null);
-    const [selectedPage, setSelectedPage] = useState('');
-    const [pages, setPages] = useState([]);
 
     useEffect(() => {
-        loadPages();
+        loadDemographics();
     }, []);
 
-    const loadPages = async () => {
-        const fbPages = await window.electron.getPages();
-        setPages(fbPages);
-        if (fbPages.length > 0) {
-            setSelectedPage(fbPages[0].id);
-            loadDemographics(fbPages[0].id);
-        }
-    };
-
-    const loadDemographics = async (pageId) => {
-        const data = await window.electron.audienceDemographics(pageId);
+    const loadDemographics = async () => {
+        // Load mock demographics data since Facebook integration is removed
+        const data = await window.electron.audienceDemographics();
         setDemographics(data);
-    };
-
-    const handlePageChange = (pageId) => {
-        setSelectedPage(pageId);
-        loadDemographics(pageId);
     };
 
     return (
         <div className="audience-analytics">
             <h2>📊 Analisis Audience & Demografi</h2>
-            
-            <div className="page-selector">
-                <label>Pilih Facebook Page:</label>
-                <select value={selectedPage} onChange={(e) => handlePageChange(e.target.value)}>
-                    {pages.map(page => (
-                        <option key={page.id} value={page.id}>{page.name}</option>
-                    ))}
-                </select>
+
+            <div className="info-box" style={{ marginBottom: 20 }}>
+                <p style={{ color: '#aaa', fontSize: 13 }}>
+                    ℹ️ Fitur ini menampilkan data analitik dari platform social media Anda.
+                </p>
             </div>
             
             {demographics && (

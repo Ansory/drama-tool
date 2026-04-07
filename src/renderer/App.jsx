@@ -39,7 +39,6 @@ import AffiliateIntegration from './components/AffiliateIntegration';
 import ProfitTracker from './components/ProfitTracker';
 
 import LoadBalancer from './components/LoadBalancer';
-import FacebookIntegration from './components/FacebookIntegration';
 import Settings from './components/Settings';
 
 import ContentRepurposing from './components/ContentRepurposing';
@@ -98,7 +97,6 @@ function App() {
         { id: 'profit',          name: '💰 Profit Tracker',        category: 'Monetization',   component: ProfitTracker },
 
         { id: 'loadbalancer',    name: '🔑 Load Balancer',         category: 'Infrastructure', component: LoadBalancer },
-        { id: 'facebook',        name: '📘 Facebook Integration',  category: 'Infrastructure', component: FacebookIntegration },
         { id: 'autoupdate',      name: '⚙️ Settings / Update',     category: 'Infrastructure', component: Settings },
 
         { id: 'repurpose',       name: '🔄 Repurpose',             category: 'Tools',          component: ContentRepurposing },

@@ -148,14 +148,6 @@ contextBridge.exposeInMainWorld('electron', {
     loadbalancerTestKey: (key) => ipcRenderer.invoke('loadbalancer:test-key', key),
     loadbalancerStats: () => ipcRenderer.invoke('loadbalancer:stats'),
 
-    // ============ MODUL 32: FACEBOOK INTEGRATION ============
-    // Facebook Login sekarang terima appId dari user (Pilihan A komersial)
-    facebookLogin: (appId) => ipcRenderer.invoke('facebook:login', appId),
-    facebookCheckLogin: () => ipcRenderer.invoke('facebook:check-login'),
-    facebookUploadReel: (options) => ipcRenderer.invoke('facebook:upload-reel', options),
-    facebookUploadVideo: (options) => ipcRenderer.invoke('facebook:upload-video', options),
-    facebookGetInsights: (options) => ipcRenderer.invoke('facebook:get-insights', options),
-
     // ============ MODUL 33: AUTO UPDATE ============
     getConfig: () => ipcRenderer.invoke('updater:get-config'),
     updateConfig: (config) => ipcRenderer.invoke('updater:update-config', config),
@@ -203,10 +195,6 @@ contextBridge.exposeInMainWorld('electron', {
     notifySend: (notification) => ipcRenderer.invoke('notify:send', notification),
     notifySubscribe: (subscription) => ipcRenderer.invoke('notify:subscribe', subscription),
     notifyGetSubscriptions: () => ipcRenderer.invoke('notify:get-subscriptions'),
-
-    // ============ FACEBOOK HELPERS ============
-    getPages: () => ipcRenderer.invoke('get-pages'),
-    getRecentPosts: () => ipcRenderer.invoke('get-recent-posts'),
 
     // ============ UTILITIES ============
     openExternal: (url) => ipcRenderer.invoke('open-external', url),

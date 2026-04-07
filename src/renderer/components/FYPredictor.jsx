@@ -2,7 +2,7 @@
 """
 FYP Predictor - Modul 7
 Fungsi: Prediksi potensi viral video berdasarkan 11 metrik
-BUG FIX: Deterministic values using video_path hash instead of random
+BUG FIX v1.0.11: Deterministic values using video_path hash instead of random
 """
 
 import json
@@ -14,12 +14,9 @@ import hashlib
 
 def get_deterministic_value(video_path, metric_name, min_val, max_val):
     """Generate deterministic value based on video_path hash and metric name"""
-    # Create unique hash from video_path + metric_name
     hash_input = f"{video_path}:{metric_name}"
     hash_hex = hashlib.md5(hash_input.encode()).hexdigest()
-    # Use first 8 bytes of hash as integer
     hash_int = int(hash_hex[:8], 16)
-    # Scale to desired range
     range_size = max_val - min_val
     return min_val + (hash_int % range_size)
 
@@ -29,9 +26,7 @@ def analyze_hook_strength(frame):
     edges = cv2.Canny(gray, 100, 200)
     edge_density = np.sum(edges > 0) / edges.size
     
-    # Deteksi teks dalam frame
-    text_detected = False  # Placeholder untuk OCR
-    
+    text_detected = False
     score = min(100, int(edge_density * 200))
     if text_detected:
         score += 10
@@ -96,10 +91,10 @@ def analyze_timing_score(duration):
         return 45
 
 def predict_fyp(video_path):
-    """Prediksi skor FYP - FIXED: Fully deterministic based on video_path"""
+    """Prediksi skor FYP - BUG FIX: Fully deterministic based on video_path"""
     cap = cv2.VideoCapture(video_path)
     
-    # FIX: Check if video opened successfully
+    # BUG FIX: Check if video opened successfully
     if not cap.isOpened():
         return {
             'error': f'Cannot open video: {video_path}',
@@ -116,7 +111,7 @@ def predict_fyp(video_path):
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # FIX: Handle potential division by zero
+    # BUG FIX: Handle potential division by zero
     if fps <= 0:
         fps = 30.0
         
@@ -145,7 +140,7 @@ def predict_fyp(video_path):
     retention_penalty = max(0, int((duration - 30) / 10))
     retention_score = max(40, min(85, retention_base - retention_penalty + aspect_bonus))
 
-    # FIXED: Use deterministic values based on video_path hash instead of random
+    # BUG FIX: Use deterministic values based on video_path hash instead of random
     metrics = {
         'hook': hook_score,
         'retention': retention_score,
@@ -191,7 +186,7 @@ def predict_fyp(video_path):
     if not is_vertical:
         recommendations.append('Crop video ke format 9:16 (vertical)')
 
-    # Retention by second - FIXED: deterministic
+    # BUG FIX: Deterministic retention calculation
     retention_by_second = {}
     for sec in range(3, min(61, int(duration) + 1), 3):
         decay_rate = 2.5 if duration > 30 else 2.0

@@ -417,21 +417,21 @@ const AutoContentGenerator = () => {
                     )}
 
                     {/* ── Video Metadata ── */}
-                    {result.video_analysis && (
+                    {result.metadata && (
                         <div style={card}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: '#ccc', marginBottom: 10 }}>
                                 📊 Metadata Video:
                             </div>
                             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                                 {[
-                                    ['⏱ Durasi',       result.video_analysis.duration != null
-                                        ? `${Number(result.video_analysis.duration).toFixed(1)}s` : null],
-                                    ['📐 Resolusi',     result.video_analysis.resolution],
-                                    ['🎞 FPS',          result.video_analysis.fps],
-                                    ['☀️ Brightness',   result.video_analysis.brightness != null
-                                        ? `${Number(result.video_analysis.brightness).toFixed(1)}` : null],
-                                    ['🏃 Motion Score', result.video_analysis.motion_score != null
-                                        ? `${Number(result.video_analysis.motion_score).toFixed(2)}` : null],
+                                    ['⏱ Durasi',       result.metadata.duration != null
+                                        ? `${Number(result.metadata.duration).toFixed(1)}s` : null],
+                                    ['📐 Resolusi',     result.metadata.resolution],
+                                    ['🎞 FPS',          result.metadata.fps],
+                                    ['☀️ Brightness',   result.metadata.brightness != null
+                                        ? `${Number(result.metadata.brightness).toFixed(1)}` : null],
+                                    ['🏃 Motion Score', result.metadata.motion_score != null
+                                        ? `${Number(result.metadata.motion_score).toFixed(2)}` : null],
                                 ].filter(([, v]) => v != null).map(([label, val]) => (
                                     <div key={label} style={{
                                         background: 'rgba(255,255,255,0.04)',

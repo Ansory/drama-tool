@@ -183,6 +183,10 @@ contextBridge.exposeInMainWorld('electron', {
     // ============ MODUL 40: GROWTH TRACKER ============
     growthTrack: (pageId) => ipcRenderer.invoke('growth:track', pageId),
 
+    // ============ FACEBOOK INTEGRATION (CRITICAL FIX) ============
+    getPages: () => ipcRenderer.invoke('facebook:get-pages'),
+    getRecentPosts: () => ipcRenderer.invoke('facebook:get-recent-posts'),
+
     // ============ AI AUTO GENERATE CONTENT ============
     autoGenerateContent: (options) => ipcRenderer.invoke('auto:generate-content', options),
 

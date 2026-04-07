@@ -6,12 +6,11 @@ Fungsi: Klasifikasi dan generate balasan komentar dengan AI
 
 import json
 import sys
-import random
 
 def classify_comment(comment_text):
     """Klasifikasi jenis komentar"""
     comment_lower = comment_text.lower()
-    
+
     # Deteksi kategori
     if any(word in comment_lower for word in ['apa', 'judul', 'drama', 'episode', 'siapa', 'dimana', 'kapan']):
         category = 'question'
@@ -25,9 +24,9 @@ def classify_comment(comment_text):
     else:
         category = 'general'
         sentiment = 'neutral'
-    
+
     needs_reply = category != 'negative'
-    
+
     return {
         'category': category,
         'sentiment': sentiment,
@@ -37,7 +36,7 @@ def classify_comment(comment_text):
 def generate_reply(comment_text, style='friendly', drama_name=''):
     """Generate balasan komentar"""
     comment_lower = comment_text.lower()
-    
+
     # Template balasan berdasarkan kategori
     templates = {
         'question': [
@@ -57,19 +56,22 @@ def generate_reply(comment_text, style='friendly', drama_name=''):
         ],
         'negative': []  # Tidak dibalas
     }
-    
+
     category = classify_comment(comment_text)['category']
-    
+
     if category == 'negative':
         return None
-    
-    reply = random.choice(templates.get(category, templates['general']))
-    
+
+    # Use deterministic selection based on comment length instead of random
+    template_list = templates.get(category, templates['general'])
+    index = len(comment_text) % len(template_list)
+    reply = template_list[index]
+
     # Replace placeholders with provided drama_name or generic fallback
     name = drama_name if drama_name else 'drama ini'
     reply = reply.replace('[judul]', name)
     reply = reply.replace('[hari]', 'hari-hari tertentu')
-    
+
     return reply
 
 def main():

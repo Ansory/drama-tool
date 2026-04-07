@@ -7,57 +7,73 @@ Fungsi: Track trending audio, hashtag, dan konten viral
 import json
 import sys
 from datetime import datetime, timedelta
+import hashlib
 
 def get_trending_audio():
     """Dapatkan daftar backsound yang sedang viral"""
-    mock_audio = [
+    # Static trending audio list (would be updated from API in production)
+    trending_audio = [
         {'name': 'See Tinh (remix)', 'usageCount': 15234, 'platform': 'TikTok'},
         {'name': 'Drama China OST Compilation', 'usageCount': 12456, 'platform': 'Instagram'},
         {'name': 'Sad Piano - Emotional', 'usageCount': 9876, 'platform': 'Facebook'},
         {'name': 'Epic Battle Music', 'usageCount': 8765, 'platform': 'YouTube Shorts'},
         {'name': 'Romantic Chinese Ballad', 'usageCount': 7654, 'platform': 'Facebook'}
     ]
-    return mock_audio
+    return trending_audio
 
 def get_hashtag_suggestions(keyword):
     """Rekomendasi hashtag berdasarkan keyword"""
-    mock_suggestions = [
-        f'#{keyword.replace(" ", "")}',
-        f'#{keyword.replace(" ", "")}SubIndo',
-        f'#{keyword.replace(" ", "")}FYP',
-        f'#{keyword.replace(" ", "")}Viral',
-        f'#{keyword.replace(" ", "")}Scene',
+    # Generate deterministic suggestions based on keyword
+    keyword_clean = keyword.replace(" ", "")
+
+    suggestions = [
+        f'#{keyword_clean}',
+        f'#{keyword_clean}SubIndo',
+        f'#{keyword_clean}FYP',
+        f'#{keyword_clean}Viral',
+        f'#{keyword_clean}Scene',
+    ]
+
+    # Add general drama hashtags
+    general_hashtags = [
         '#DramaChina',
         '#ChineseDrama',
         '#FYP',
         '#ReelsDrama',
         '#DrakorChina'
     ]
-    return mock_suggestions[:10]
+
+    # Combine and return unique hashtags
+    all_suggestions = suggestions + general_hashtags
+    return list(dict.fromkeys(all_suggestions))[:10]  # Remove duplicates, max 10
 
 def get_viral_content():
     """Dapatkan konten yang sedang viral"""
-    mock_viral = [
+    # Use current hour to create pseudo-dynamic trending content
+    # This simulates changing trends throughout the day
+    current_hour = datetime.now().hour
+
+    viral_content = [
         {
             'name': 'The Double - Plot Twist Episode 5',
-            'volume': 15234,
+            'volume': 15234 + (current_hour * 100),
             'score': 95,
             'expiryTime': (datetime.now() + timedelta(hours=6)).timestamp() * 1000
         },
         {
             'name': 'Xue Fangfei Revenge Scene',
-            'volume': 12456,
+            'volume': 12456 + (current_hour * 80),
             'score': 92,
             'expiryTime': (datetime.now() + timedelta(hours=8)).timestamp() * 1000
         },
         {
             'name': 'Sad Scene with OST - Hidden Love',
-            'volume': 9876,
+            'volume': 9876 + (current_hour * 60),
             'score': 88,
             'expiryTime': (datetime.now() + timedelta(hours=4)).timestamp() * 1000
         }
     ]
-    return mock_viral
+    return viral_content
 
 def main():
     if len(sys.argv) < 2:

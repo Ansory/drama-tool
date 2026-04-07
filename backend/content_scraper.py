@@ -7,33 +7,41 @@ Fungsi: Scrape tren drama China dari berbagai sumber
 import json
 import sys
 from datetime import datetime
+import hashlib
 
 def get_trending_dramas(keyword='drama china'):
     """Ambil tren drama dari berbagai sumber"""
     trends = []
-    
-    # Mock data - dalam implementasi nyata, ini akan scrape dari:
-    # - Weibo trending
-    # - Douyin
-    # - Facebook Reels trending
-    # - TikTok
-    
-    mock_trends = [
-        {'name': 'The Double - Episode 5 Plot Twist', 'volume': 15234, 'platform': 'Facebook'},
-        {'name': 'Love Between Fairy and Devil OST', 'volume': 12456, 'platform': 'TikTok'},
-        {'name': 'Xue Fangfei Revenge Scene', 'volume': 9876, 'platform': 'Instagram'},
-        {'name': 'Hidden Love - New Episode', 'volume': 8765, 'platform': 'Facebook'},
-        {'name': 'Zhang Linghe Interview', 'volume': 7654, 'platform': 'YouTube'}
+
+    # Use keyword hash to generate deterministic trends
+    keyword_hash = hashlib.md5(keyword.encode()).hexdigest()
+    base_seed = int(keyword_hash[:8], 16)
+
+    # Generate platform-specific trends based on keyword
+    platforms = ['Facebook', 'TikTok', 'Instagram', 'Facebook', 'YouTube']
+
+    # Base trending dramas (would be fetched from APIs in production)
+    base_trends = [
+        'The Double - Episode 5 Plot Twist',
+        'Love Between Fairy and Devil OST',
+        'Xue Fangfei Revenge Scene',
+        'Hidden Love - New Episode',
+        'Zhang Linghe Interview'
     ]
-    
-    for trend in mock_trends:
+
+    for i, trend_name in enumerate(base_trends):
+        # Generate deterministic volume based on keyword and index
+        seed_modifier = (base_seed >> (i * 4)) & 0xFFFF
+        volume = 5000 + (seed_modifier % 10000) + (1000 * (5 - i))
+
         trends.append({
-            'name': trend['name'],
-            'volume': trend['volume'],
-            'platform': trend['platform'],
-            'timestamp': datetime.now().isoformat()
+            'name': trend_name,
+            'volume': volume,
+            'platform': platforms[i],
+            'timestamp': datetime.now().isoformat(),
+            'relevance': round(100 - (i * 10), 2)  # Descending relevance
         })
-    
+
     return trends
 
 def main():

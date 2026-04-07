@@ -7,25 +7,16 @@ const Scheduler = () => {
         videoPath: '',
         caption: '',
         hashtags: '',
-        scheduledTime: '',
-        pageId: ''
+        scheduledTime: ''
     });
-    const [pages, setPages] = useState([]);
 
     useEffect(() => {
         loadSchedules();
-        loadPages();
     }, []);
 
     const loadSchedules = async () => {
         const list = await window.electron.schedulerList();
         setSchedules(list);
-    };
-
-    const loadPages = async () => {
-        // Load Facebook Pages
-        const fbPages = await window.electron.getPages();
-        setPages(fbPages);
     };
 
     const onDrop = useCallback((acceptedFiles) => {
@@ -53,8 +44,7 @@ const Scheduler = () => {
                 videoPath: '',
                 caption: '',
                 hashtags: '',
-                scheduledTime: '',
-                pageId: ''
+                scheduledTime: ''
             });
             loadSchedules();
         }
@@ -99,18 +89,11 @@ const Scheduler = () => {
                 />
                 
                 <div className="form-row">
-                    <input 
-                        type="datetime-local" 
+                    <input
+                        type="datetime-local"
                         value={newSchedule.scheduledTime}
                         onChange={(e) => setNewSchedule({...newSchedule, scheduledTime: new Date(e.target.value).getTime()})}
                     />
-                    
-                    <select value={newSchedule.pageId} onChange={(e) => setNewSchedule({...newSchedule, pageId: e.target.value})}>
-                        <option value="">Pilih Facebook Page</option>
-                        {pages.map(page => (
-                            <option key={page.id} value={page.id}>{page.name}</option>
-                        ))}
-                    </select>
                 </div>
                 
                 <button onClick={addSchedule}>Tambah ke Jadwal</button>

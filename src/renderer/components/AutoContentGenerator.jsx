@@ -1,486 +1,272 @@
-import React, { useState } from 'react';
+#!/usr/bin/env python3
+"""
+Auto Content Generator - Backend
+Analisis video dan generate judul, caption, hashtag otomatis via Gemini AI
+BUG FIX v1.0.11: Added proper error handling and logging
+"""
 
-const sceneOptions = [
-    { value: 'auto',             label: '🤖 Auto Detect' },
-    { value: 'sad_dramatic',     label: '😭 Sedih / Haru' },
-    { value: 'romantic_bright',  label: '💕 Romantis' },
-    { value: 'action',           label: '⚔️ Action' },
-    { value: 'plot_twist',       label: '😱 Plot Twist' },
-    { value: 'confrontation',    label: '💥 Konfrontasi' },
-    { value: 'drama_general',    label: '🎭 Drama Umum' },
-];
+import json
+import sys
+import os
+import cv2
+import numpy as np
+from pathlib import Path
+import logging
 
-const platformOptions = [
-    { value: 'facebook',  label: '📘 Facebook' },
-    { value: 'instagram', label: '📷 Instagram' },
-    { value: 'tiktok',    label: '🎵 TikTok' },
-    { value: 'youtube',   label: '▶️ YouTube' },
-];
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-const AutoContentGenerator = () => {
-    const [videoPath, setVideoPath]         = useState('');
-    const [dramaName, setDramaName]         = useState('');
-    const [sceneHint, setSceneHint]         = useState('auto');
-    const [platform, setPlatform]           = useState('facebook');
-    const [generating, setGenerating]       = useState(false);
-    const [result, setResult]               = useState(null);
-    const [error, setError]                 = useState('');
-    const [selectedTitle, setSelectedTitle] = useState(0);
-    const [copied, setCopied]               = useState('');
+# Import load balancer yang sudah ada
+sys.path.insert(0, str(Path(__file__).parent))
+try:
+    from gemini_load_balancer import GeminiLoadBalancer
+    lb = GeminiLoadBalancer()
+    HAS_GEMINI = True
+    logger.info("Gemini Load Balancer initialized successfully")
+except Exception as e:
+    HAS_GEMINI = False
+    lb = None
+    # BUG FIX: Log error properly instead of silent fail
+    logger.error(f"Failed to initialize Gemini Load Balancer: {str(e)}")
+    logger.warning("Auto Content Generator will run in fallback mode")
 
-    const handleSelectVideo = async () => {
-        const res = await window.electron.showOpenDialog({
-            filters: [{ name: 'Video', extensions: ['mp4', 'mkv', 'avi', 'mov', 'webm', 'flv'] }],
-            properties: ['openFile']
-        });
-        if (res && !res.canceled && res.filePaths && res.filePaths[0]) {
-            setVideoPath(res.filePaths[0]);
-            setResult(null);
-            setError('');
+def extract_video_metadata(video_path):
+    """Analisis video untuk konteks AI"""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        logger.error(f"Cannot open video: {video_path}")
+        return {}
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    duration = frame_count / fps if fps > 0 else 0
+
+    sample_frames = []
+    sample_points = [0.1, 0.3, 0.5, 0.7, 0.9]
+
+    for point in sample_points:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_count * point))
+        ret, frame = cap.read()
+        if ret:
+            sample_frames.append(frame)
+
+    cap.release()
+
+    brightness = 0
+    if sample_frames:
+        gray_frames = [cv2.cvtColor(f, cv2.COLOR_BGR2GRAY) for f in sample_frames]
+        brightness = int(np.mean([np.mean(g) for g in gray_frames]))
+
+    motion_score = 0
+    if len(sample_frames) > 1:
+        diffs = []
+        for i in range(1, len(sample_frames)):
+            diff = cv2.absdiff(sample_frames[i-1], sample_frames[i])
+            diffs.append(np.mean(diff))
+        motion_score = int(np.mean(diffs))
+
+    is_vertical = height > width
+    aspect = f"{width}x{height}"
+
+    return {
+        'duration': round(duration, 1),
+        'fps': round(fps, 1),
+        'resolution': aspect,
+        'is_vertical': is_vertical,
+        'brightness': brightness,
+        'motion_score': motion_score,
+        'frame_count': frame_count
+    }
+
+def detect_scene_type(metadata):
+    """Deteksi jenis scene dari metadata video"""
+    motion = metadata.get('motion_score', 0)
+    bright = metadata.get('brightness', 128)
+    duration = metadata.get('duration', 30)
+
+    if motion > 40:
+        return 'action'
+    elif bright < 70:
+        return 'sad_dramatic'
+    elif bright > 180:
+        return 'romantic_bright'
+    elif duration < 15:
+        return 'plot_twist'
+    else:
+        return 'drama_general'
+
+def build_prompt(metadata, drama_name, scene_hint, platform):
+    """Buat prompt untuk Gemini"""
+    duration = metadata.get('duration', 30)
+    is_vertical = metadata.get('is_vertical', True)
+    scene_type = detect_scene_type(metadata)
+
+    if scene_hint and scene_hint != 'auto':
+        scene_type = scene_hint
+
+    scene_labels = {
+        'action': 'adegan action/pertarungan seru',
+        'sad_dramatic': 'adegan sedih/haru/menangis',
+        'romantic_bright': 'adegan romantis/sweet moment',
+        'plot_twist': 'plot twist mengejutkan',
+        'drama_general': 'adegan drama menarik',
+        'confrontation': 'konfrontasi/tamparan balik',
+        'comedy': 'adegan lucu/kocak'
+    }
+
+    scene_label = scene_labels.get(scene_type, 'adegan drama')
+
+    platform_notes = {
+        'facebook': 'Facebook Reels (max caption 2200 karakter, 30 hashtag)',
+        'instagram': 'Instagram Reels (max caption 2200 karakter, 30 hashtag)',
+        'tiktok': 'TikTok (caption singkat, max 150 karakter)',
+        'youtube': 'YouTube Shorts (judul max 100 karakter, deskripsi panjang ok)'
+    }
+
+    platform_note = platform_notes.get(platform, platform_notes['facebook'])
+    drama_context = f'Drama: "{drama_name}"' if drama_name else 'Drama China (judul tidak diketahui)'
+
+    prompt = f"""Kamu adalah ahli konten viral drama China di media sosial Indonesia.
+
+Analisis video berikut dan buat konten optimal:
+- {drama_context}
+- Jenis scene: {scene_label}
+- Durasi video: {duration} detik
+- Format: {'Vertikal 9:16 (optimal untuk Reels)' if is_vertical else 'Horizontal (kurang optimal untuk Reels)'}
+- Platform target: {platform_note}
+
+Berikan output dalam format JSON PERSIS seperti ini (tanpa penjelasan lain):
+{{
+  "titles": [
+    "judul1 yang menarik dan bikin penasaran",
+    "judul2 alternatif dengan angle berbeda",
+    "judul3 lebih emosional/dramatis"
+  ],
+  "caption_short": "caption pendek 1-2 kalimat max 150 karakter, cocok untuk TikTok, tanpa hashtag",
+  "caption_long": "caption panjang 3-5 kalimat yang engaging, cerita singkat scene, ajak interaksi (tanya pendapat/like jika setuju), tanpa hashtag",
+  "hashtags": ["#hashtag1", "#hashtag2", "#hashtag3", "#hashtag4", "#hashtag5", "#hashtag6", "#hashtag7", "#hashtag8", "#hashtag9", "#hashtag10"],
+  "hook_suggestions": ["saran hook 1", "saran hook 2", "saran hook 3"],
+  "viral_potential": "alasannya kenapa video ini bisa viral"
+}}
+
+PENTING: Gunakan bahasa Indonesia gaul yang sering dipakai di media sosial seperti TikTok dan Instagram. Gunakan kata-kata seperti 'bestie', 'auto', 'fyp', 'viral', 'gak', 'banget', dll."""
+
+    return prompt
+
+def generate_content(video_path, drama_name='', scene_hint='auto', platform='facebook'):
+    """Generate judul, caption, hashtag otomatis"""
+    
+    # BUG FIX: Check if file exists first
+    if not os.path.exists(video_path):
+        error_msg = f"Video file not found: {video_path}"
+        logger.error(error_msg)
+        return {
+            'error': error_msg,
+            'titles': ['Error: Video tidak ditemukan'],
+            'caption_short': '',
+            'caption_long': '',
+            'hashtags': [],
+            'hook_suggestions': [],
+            'viral_potential': ''
         }
-    };
-
-    const handleGenerate = async () => {
-        if (!videoPath) {
-            setError('Pilih file video terlebih dahulu.');
-            return;
+    
+    metadata = extract_video_metadata(video_path)
+    
+    # BUG FIX: Check if metadata extraction succeeded
+    if not metadata:
+        error_msg = "Failed to extract video metadata"
+        logger.error(error_msg)
+        return {
+            'error': error_msg,
+            'titles': ['Error: Gagal membaca metadata video'],
+            'caption_short': '',
+            'caption_long': '',
+            'hashtags': [],
+            'hook_suggestions': [],
+            'viral_potential': ''
         }
-        setGenerating(true);
-        setError('');
-        setResult(null);
-        try {
-            const res = await window.electron.autoGenerateContent({
-                videoPath, dramaName, sceneHint, platform
-            });
-            if (res.error && !res.fallback) {
-                setError(res.error);
-            } else {
-                setResult(res.fallback || res);
-                setSelectedTitle(0);
+    
+    if not HAS_GEMINI or lb is None:
+        # Fallback mode with default templates
+        logger.warning("Running in fallback mode - Gemini not available")
+        scene_type = detect_scene_type(metadata)
+        
+        fallback_titles = {
+            'action': ['Adegan Action Seru! Auto Viral!', 'Pertarungan Epic! Jangan Sampai Lewat!', 'Action Scene Terbaik!'],
+            'sad_dramatic': ['Scene Menangis Ini Bikin Mewek', 'Sedih Banget! Siapkan Tisu', 'Emotional Scene Terbaik'],
+            'romantic_bright': ['Moment Romantis Bikin Baper', 'Scene Sweet Ini Auto Gemas!', 'Romantis Banget!'],
+            'plot_twist': ['Plot Twist Gak Terduga!', 'Ending Bikin Kaget!', 'Twist Scene Viral!'],
+            'drama_general': ['Adegan Drama Menarik', 'Scene Viral Drama China', 'Drama Scene Terbaik']
+        }
+        
+        return {
+            'titles': fallback_titles.get(scene_type, fallback_titles['drama_general']),
+            'caption_short': f'Scene {scene_type} dari drama china! Jangan lupa like dan share bestie!',
+            'caption_long': f'Kalian tim yang mana bestie? Komen di bawah ya! Scene {scene_type} ini emang bikin nagih banget sih. Jangan lupa follow buat dapet update terbaru!',
+            'hashtags': ['#DramaChina', '#FYP', '#Viral', '#DramaClip', '#SceneDrama'],
+            'hook_suggestions': ['Tambahkan teks hook di awal', 'Gunakan backsound viral', 'Tambahkan reaksi emoticon'],
+            'viral_potential': 'Video memiliki potensi viral dengan konten yang menarik',
+            'note': 'Generated in fallback mode - Gemini API not available'
+        }
+    
+    prompt = build_prompt(metadata, drama_name, scene_hint, platform)
+    
+    try:
+        # Call Gemini API via load balancer
+        response = lb.generate_content(prompt)
+        
+        # Parse JSON response
+        try:
+            result = json.loads(response)
+            result['metadata'] = metadata  # Include metadata for frontend
+            return result
+        except json.JSONDecodeError:
+            # If not valid JSON, wrap in fallback
+            logger.error(f"Invalid JSON response from Gemini: {response[:200]}")
+            return {
+                'titles': ['Error: Invalid AI response format'],
+                'caption_short': '',
+                'caption_long': response[:500] if response else '',
+                'hashtags': [],
+                'hook_suggestions': [],
+                'viral_potential': '',
+                'metadata': metadata,
+                'error': 'Invalid JSON from AI'
             }
-        } catch (err) {
-            setError(err.message || 'Gagal generate konten. Coba lagi.');
+            
+    except Exception as e:
+        # BUG FIX: Properly log and return error
+        error_msg = f"Gemini API error: {str(e)}"
+        logger.error(error_msg)
+        return {
+            'error': error_msg,
+            'titles': ['Error: Gagal generate konten'],
+            'caption_short': '',
+            'caption_long': '',
+            'hashtags': [],
+            'hook_suggestions': [],
+            'viral_potential': '',
+            'metadata': metadata
         }
-        setGenerating(false);
-    };
 
-    const copyText = async (text, key) => {
-        try {
-            await navigator.clipboard.writeText(text);
-            setCopied(key);
-            setTimeout(() => setCopied(''), 2000);
-        } catch {
-            setCopied(`${key}_fail`);
-            setTimeout(() => setCopied(''), 2000);
-        }
-    };
+def main():
+    if len(sys.argv) < 2:
+        print(json.dumps({'error': 'No command specified'}))
+        return
+    
+    command = sys.argv[1]
+    
+    if command == 'generate':
+        video_path = sys.argv[2] if len(sys.argv) > 2 else ''
+        drama_name = sys.argv[3] if len(sys.argv) > 3 else ''
+        scene_hint = sys.argv[4] if len(sys.argv) > 4 else 'auto'
+        platform = sys.argv[5] if len(sys.argv) > 5 else 'facebook'
+        
+        result = generate_content(video_path, drama_name, scene_hint, platform)
+        print(json.dumps(result))
 
-    const copyAll = () => {
-        if (!result) return;
-        const title    = result.titles?.[selectedTitle] || '';
-        const caption  = result.caption_long || '';
-        const hashtags = result.hashtags?.join(' ') || '';
-        copyText([title, caption, hashtags].filter(Boolean).join('\n\n'), 'all');
-    };
-
-    const videoFileName = videoPath ? videoPath.split(/[\\/]/).pop() : '';
-
-    /* ─── shared inline styles ─── */
-    const card = {
-        background: 'rgba(255,255,255,0.05)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: 16,
-        padding: 20,
-        marginBottom: 16,
-    };
-
-    const label12 = { fontSize: 12, color: '#aaa', display: 'block', marginBottom: 4 };
-
-    const inputStyle = {
-        width: '100%',
-        background: 'rgba(255,255,255,0.06)',
-        border: '1px solid rgba(255,255,255,0.12)',
-        borderRadius: 10,
-        padding: '10px 14px',
-        color: '#fff',
-        fontSize: 13,
-        outline: 'none',
-        boxSizing: 'border-box',
-    };
-
-    const copyBtn = (text, key, label) => (
-        <button
-            onClick={() => copyText(text, key)}
-            style={{
-                background: copied === key ? 'rgba(78,205,196,0.2)' : copied === `${key}_fail` ? 'rgba(255,70,70,0.15)' : 'rgba(255,255,255,0.06)',
-                border: `1px solid ${copied === key ? 'rgba(78,205,196,0.5)' : copied === `${key}_fail` ? 'rgba(255,70,70,0.4)' : 'rgba(255,255,255,0.1)'}`,
-                borderRadius: 8,
-                padding: '5px 12px',
-                fontSize: 12,
-                color: copied === key ? '#4ecdc4' : copied === `${key}_fail` ? '#ff6b6b' : '#aaa',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-            }}
-        >
-            {copied === key ? '✅ Tersalin!' : copied === `${key}_fail` ? '❌ Gagal copy' : label}
-        </button>
-    );
-
-    return (
-        <div style={{ padding: '24px 28px', maxWidth: 820, margin: '0 auto' }}>
-            {/* Header */}
-            <div style={{ marginBottom: 24 }}>
-                <h2 style={{ margin: 0, fontSize: 22, color: '#4ecdc4', display: 'flex', alignItems: 'center', gap: 10 }}>
-                    🤖 Auto Content Generator
-                </h2>
-                <p style={{ margin: '6px 0 0', fontSize: 13, color: '#888' }}>
-                    Analisis video drama secara otomatis dan hasilkan judul, caption, serta hashtag dengan AI.
-                </p>
-            </div>
-
-            {/* ── Form Card ── */}
-            <div style={card}>
-                {/* Video Picker */}
-                <div style={{ marginBottom: 16 }}>
-                    <label style={label12}>File Video:</label>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <button
-                            onClick={handleSelectVideo}
-                            style={{
-                                background: 'rgba(78,205,196,0.12)',
-                                border: '1px solid rgba(78,205,196,0.35)',
-                                borderRadius: 10,
-                                padding: '9px 18px',
-                                fontSize: 13,
-                                color: '#4ecdc4',
-                                cursor: 'pointer',
-                                whiteSpace: 'nowrap',
-                                flexShrink: 0,
-                            }}
-                        >
-                            🎬 Pilih Video
-                        </button>
-                        <div style={{
-                            flex: 1,
-                            background: 'rgba(255,255,255,0.04)',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            borderRadius: 10,
-                            padding: '9px 14px',
-                            fontSize: 12,
-                            color: videoPath ? '#ccc' : '#555',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                        }}>
-                            {videoFileName || 'Belum ada file dipilih…'}
-                        </div>
-                    </div>
-                </div>
-
-                {/* Inputs Row */}
-                <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 16 }}>
-                    {/* Drama Name */}
-                    <div style={{ flex: 2, minWidth: 180 }}>
-                        <label style={label12}>Nama Drama (opsional):</label>
-                        <input
-                            type="text"
-                            value={dramaName}
-                            onChange={(e) => setDramaName(e.target.value)}
-                            placeholder="Contoh: The Double, Ratu Air Mata…"
-                            style={inputStyle}
-                        />
-                    </div>
-
-                    {/* Scene Hint */}
-                    <div style={{ flex: 1, minWidth: 160 }}>
-                        <label style={label12}>Jenis Scene:</label>
-                        <select
-                            value={sceneHint}
-                            onChange={(e) => setSceneHint(e.target.value)}
-                            style={inputStyle}
-                        >
-                            {sceneOptions.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    {/* Platform */}
-                    <div style={{ flex: 1, minWidth: 140 }}>
-                        <label style={label12}>Platform Target:</label>
-                        <select
-                            value={platform}
-                            onChange={(e) => setPlatform(e.target.value)}
-                            style={inputStyle}
-                        >
-                            {platformOptions.map((o) => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                            ))}
-                        </select>
-                    </div>
-                </div>
-
-                {/* Generate Button */}
-                <button
-                    onClick={handleGenerate}
-                    disabled={generating}
-                    style={{
-                        width: '100%',
-                        padding: '12px 0',
-                        fontSize: 15,
-                        fontWeight: 700,
-                        background: generating
-                            ? 'rgba(255,255,255,0.06)'
-                            : 'linear-gradient(135deg, #4ecdc4, #45b7b8)',
-                        color: generating ? '#666' : '#0f0f1a',
-                        border: 'none',
-                        borderRadius: 12,
-                        cursor: generating ? 'not-allowed' : 'pointer',
-                        transition: 'all 0.2s',
-                        letterSpacing: 0.5,
-                    }}
-                >
-                    {generating ? '🤖 AI sedang menganalisis video…' : '✨ Generate Konten dengan AI'}
-                </button>
-            </div>
-
-            {/* ── Error State ── */}
-            {error && (
-                <div style={{
-                    background: 'rgba(255,70,70,0.1)',
-                    border: '1px solid rgba(255,70,70,0.3)',
-                    borderRadius: 12,
-                    padding: '12px 16px',
-                    color: '#ff6b6b',
-                    fontSize: 13,
-                    marginBottom: 16,
-                }}>
-                    ⚠️ {error}
-                    {error.toLowerCase().includes('api key') && (
-                        <span style={{ color: '#aaa' }}>
-                            {' '}— Tambahkan Gemini API key di menu <strong style={{ color: '#4ecdc4' }}>🔑 Load Balancer</strong>.
-                        </span>
-                    )}
-                </div>
-            )}
-
-            {/* ── Result ── */}
-            {result && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                    {/* Source Badge */}
-                    <div style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 8,
-                        background: result.generated_by === 'gemini'
-                            ? 'rgba(78,205,196,0.12)' : 'rgba(255,255,255,0.05)',
-                        border: `1px solid ${result.generated_by === 'gemini'
-                            ? 'rgba(78,205,196,0.3)' : 'rgba(255,255,255,0.08)'}`,
-                        borderRadius: 20,
-                        padding: '5px 14px',
-                        fontSize: 12,
-                        color: result.generated_by === 'gemini' ? '#4ecdc4' : '#888',
-                        alignSelf: 'flex-start',
-                    }}>
-                        {result.generated_by === 'gemini'
-                            ? `✅ Dibuat oleh Gemini AI (${result.tokens_used || 0} tokens)`
-                            : '📝 Template — Tambahkan Gemini API key di Load Balancer untuk hasil lebih baik'}
-                    </div>
-
-                    {/* ── Titles ── */}
-                    <div style={card}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>🎯 Pilih Judul:</span>
-                            {copyBtn(result.titles?.[selectedTitle] || '', 'title', '📋 Copy Judul')}
-                        </div>
-                        {result.titles?.map((title, i) => (
-                            <div
-                                key={i}
-                                onClick={() => setSelectedTitle(i)}
-                                style={{
-                                    padding: '9px 13px',
-                                    borderRadius: 10,
-                                    cursor: 'pointer',
-                                    background: selectedTitle === i
-                                        ? 'rgba(78,205,196,0.15)' : 'rgba(255,255,255,0.03)',
-                                    border: `1px solid ${selectedTitle === i
-                                        ? 'rgba(78,205,196,0.45)' : 'rgba(255,255,255,0.06)'}`,
-                                    marginBottom: 6,
-                                    fontSize: 13,
-                                    color: '#fff',
-                                    transition: 'all 0.15s',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: 8,
-                                }}
-                            >
-                                <span style={{ color: '#4ecdc4', minWidth: 16 }}>
-                                    {selectedTitle === i ? '✓' : ''}
-                                </span>
-                                {title}
-                            </div>
-                        ))}
-                    </div>
-
-                    {/* ── Captions ── */}
-                    <div style={card}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>📝 Caption Pendek:</span>
-                            {copyBtn(result.caption_short || '', 'caption_short', '📋 Copy')}
-                        </div>
-                        <div style={{
-                            background: 'rgba(0,0,0,0.25)',
-                            borderRadius: 10,
-                            padding: '10px 13px',
-                            fontSize: 13,
-                            color: '#ccc',
-                            lineHeight: 1.6,
-                            marginBottom: 14,
-                        }}>
-                            {result.caption_short || '—'}
-                        </div>
-
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>📄 Caption Panjang:</span>
-                            {copyBtn(result.caption_long || '', 'caption_long', '📋 Copy')}
-                        </div>
-                        <div style={{
-                            background: 'rgba(0,0,0,0.25)',
-                            borderRadius: 10,
-                            padding: '10px 13px',
-                            fontSize: 13,
-                            color: '#ccc',
-                            lineHeight: 1.6,
-                            maxHeight: 120,
-                            overflowY: 'auto',
-                        }}>
-                            {result.caption_long || '—'}
-                        </div>
-                    </div>
-
-                    {/* ── Hashtags ── */}
-                    <div style={card}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: '#ccc' }}>
-                                🔖 Hashtag ({result.hashtags?.length || 0}):
-                            </span>
-                            {copyBtn(result.hashtags?.join(' ') || '', 'hashtags', '📋 Copy Hashtag')}
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                            {result.hashtags?.map((tag, i) => (
-                                <span key={i} style={{
-                                    background: 'rgba(78,205,196,0.12)',
-                                    border: '1px solid rgba(78,205,196,0.25)',
-                                    padding: '4px 12px',
-                                    borderRadius: 20,
-                                    fontSize: 12,
-                                    color: '#4ecdc4',
-                                }}>
-                                    {tag}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* ── Info Row ── */}
-                    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                        <div style={{ ...card, flex: 1, minWidth: 130, marginBottom: 0, padding: '12px 14px' }}>
-                            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>⏰ Waktu Posting Terbaik</div>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: '#4ecdc4' }}>
-                                {result.best_post_time ? `${result.best_post_time} WIB` : '—'}
-                            </div>
-                        </div>
-                        <div style={{ ...card, flex: 1, minWidth: 130, marginBottom: 0, padding: '12px 14px' }}>
-                            <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>🎬 Teks Thumbnail</div>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#ff6b6b' }}>
-                                {result.thumbnail_text || '—'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── Viral Tips ── */}
-                    {result.viral_tips?.length > 0 && (
-                        <div style={{
-                            ...card,
-                            background: 'rgba(255,107,107,0.07)',
-                            border: '1px solid rgba(255,107,107,0.2)',
-                        }}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#ff6b6b', marginBottom: 8 }}>
-                                💡 Tips Viral:
-                            </div>
-                            {result.viral_tips.map((tip, i) => (
-                                <div key={i} style={{ fontSize: 13, color: '#bbb', marginBottom: 4, lineHeight: 1.5 }}>
-                                    • {tip}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* ── Video Metadata ── */}
-                    {result.metadata && (
-                        <div style={card}>
-                            <div style={{ fontSize: 13, fontWeight: 600, color: '#ccc', marginBottom: 10 }}>
-                                📊 Metadata Video:
-                            </div>
-                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                {[
-                                    ['⏱ Durasi',       result.metadata.duration != null
-                                        ? `${Number(result.metadata.duration).toFixed(1)}s` : null],
-                                    ['📐 Resolusi',     result.metadata.resolution],
-                                    ['🎞 FPS',          result.metadata.fps],
-                                    ['☀️ Brightness',   result.metadata.brightness != null
-                                        ? `${Number(result.metadata.brightness).toFixed(1)}` : null],
-                                    ['🏃 Motion Score', result.metadata.motion_score != null
-                                        ? `${Number(result.metadata.motion_score).toFixed(2)}` : null],
-                                ].filter(([, v]) => v != null).map(([label, val]) => (
-                                    <div key={label} style={{
-                                        background: 'rgba(255,255,255,0.04)',
-                                        border: '1px solid rgba(255,255,255,0.07)',
-                                        borderRadius: 10,
-                                        padding: '7px 12px',
-                                        fontSize: 12,
-                                        flex: '1 1 100px',
-                                        minWidth: 90,
-                                    }}>
-                                        <div style={{ color: '#666', marginBottom: 2 }}>{label}</div>
-                                        <div style={{ color: '#ccc', fontWeight: 600 }}>{val}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── Copy All Button ── */}
-                    <button
-                        onClick={copyAll}
-                        style={{
-                            width: '100%',
-                            padding: '12px 0',
-                            fontSize: 14,
-                            fontWeight: 700,
-                            background: copied === 'all'
-                                ? 'rgba(78,205,196,0.2)'
-                                : copied === 'all_fail'
-                                ? 'rgba(255,70,70,0.15)'
-                                : 'linear-gradient(135deg, #ff6b6b, #ff5252)',
-                            color: copied === 'all' ? '#4ecdc4' : copied === 'all_fail' ? '#ff6b6b' : '#fff',
-                            border: `1px solid ${copied === 'all' ? 'rgba(78,205,196,0.4)' : copied === 'all_fail' ? 'rgba(255,70,70,0.4)' : 'transparent'}`,
-                            borderRadius: 12,
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            letterSpacing: 0.4,
-                        }}
-                    >
-                        {copied === 'all'
-                            ? '✅ Semua tersalin ke clipboard!'
-                            : copied === 'all_fail'
-                            ? '❌ Gagal copy ke clipboard'
-                            : '📋 Copy Semua (Judul + Caption + Hashtag)'}
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-};
-
-export default AutoContentGenerator;
+if __name__ == '__main__':
+    main()
